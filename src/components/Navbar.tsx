@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu, Phone, X } from "lucide-react";
 import { cn } from "../utils/cn";
-import { BayMark } from "./Brand";
+import { BrandLogo } from "./Brand";
 
 const LINKS = [
   { id: "turlar", label: "Turlar" },
@@ -49,19 +49,20 @@ export default function Navbar() {
     <header className="fixed inset-x-0 top-10 z-50 px-4 pt-2 sm:px-6 sm:pt-2.5">
       <div
         className={cn(
-          "mx-auto flex max-w-6xl items-center gap-1 rounded-full px-4 py-2.5 transition-all duration-500 sm:gap-2 sm:px-5",
+          "mx-auto flex max-w-6xl items-center gap-1 rounded-full py-2 pl-2 pr-3 transition-all duration-500 sm:gap-2 sm:py-2.5 sm:pl-3 sm:pr-5",
           onHero
             ? "bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-xl"
             : "bg-white/72 text-ink shadow-[0_8px_40px_-12px_rgba(0,0,0,0.18)] ring-1 ring-black/[0.06] backdrop-blur-2xl"
         )}
       >
-        <button onClick={() => go("home")} className="flex items-center gap-2 pl-1" aria-label="bayTrip bosh sahifa">
-          <span className={cn("grid h-9 w-9 place-items-center rounded-full", onHero ? "bg-white text-brand-600" : "bg-brand-600 text-white")}>
-            <BayMark className="h-6 w-6" />
-          </span>
-          <span className="font-display text-lg font-extrabold tracking-tight">
-            bay<span className={onHero ? "text-sun" : "text-brand-600"}>Trip</span>
-          </span>
+        <button onClick={() => go("home")} className="flex shrink-0 items-center" aria-label="bayTrip bosh sahifa">
+          <BrandLogo
+            theme={onHero ? "hero" : "light"}
+            imageClassName={cn(
+              "h-12 max-w-[190px] rounded-full px-3 py-1 sm:h-14 sm:max-w-[220px] lg:h-[58px] lg:max-w-[232px]",
+              onHero ? "bg-white/95 shadow-md shadow-brand-950/15" : "bg-white/85 shadow-sm ring-1 ring-black/[0.03]"
+            )}
+          />
         </button>
 
         <nav className="mx-auto hidden items-center gap-1 lg:flex">

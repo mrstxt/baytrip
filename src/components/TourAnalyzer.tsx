@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, RefreshCw, Target } from "lucide-react";
+import { ArrowRight, BadgeCheck, RefreshCw, Target, TrendingUp } from "lucide-react";
 import { DOMESTIC_TOURS, TOURS, formatPrice, type TourBase } from "../data";
 import Reveal from "./Reveal";
 import TourModal from "./TourModal";
@@ -11,6 +11,31 @@ type Answers = {
   days: number;
   budget: number;
   month: string;
+};
+
+type TourMatch = {
+  tour: TourBase;
+  score: number;
+  reasons: string[];
+  warnings: string[];
+  priceUsd: number;
+};
+
+const USD_RATE = 12800;
+
+const TYPE_ALIASES: Record<string, string[]> = {
+  plyaj: ["plyaj", "dengiz", "sohil", "orol", "suv", "villa", "ko'l", "issiqko'l"],
+  tarix: ["tarix", "tarixiy", "madaniyat", "shahar", "registon", "buxoro", "xiva", "rim", "istanbul", "ipak"],
+  tabiat: ["tabiat", "tog'", "tog", "trekking", "ko'l", "vodiy", "sharshara", "chorvoq", "chimyon", "fon"],
+  shahar: ["shahar", "shopping", "zamonaviy", "osmono'par", "parij", "dubai", "tokio", "almati"],
+  lyuks: ["lyuks", "villa", "5★", "all inclusive", "resort", "maldiv", "romantik", "spa"],
+};
+
+const SEASON_ALIASES: Record<string, string[]> = {
+  yoz: ["iyun", "iyul", "avgust", "yoz", "har hafta"],
+  kuz: ["sentabr", "sentyabr", "oktabr", "noyabr", "kuz"],
+  qish: ["dekabr", "yanvar", "fevral", "qish"],
+  bahor: ["mart", "aprel", "may", "bahor"],
 };
 
 const getBudgetOptions = (region: Region) => {
@@ -78,7 +103,8 @@ export default function TourAnalyzer() {
     budget: 900,
     month: "",
   });
-  const [result, setResult] = useState<TourBase[]>([]);
+  const [result, setResult] = useState<TourMatch[]>([]);
+  const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [feedback, setFeedback] = useState<string[]>([]);
   const [selectedTour, setSelectedTour] = useState<TourBase | null>(null);
 
@@ -114,35 +140,138 @@ export default function TourAnalyzer() {
       const matched = calculateRecommendations(newAnswers);
       setResult(matched);
       setFeedback(generateFeedback(newAnswers, matched));
+      setHasAnalyzed(true);
     }
   };
 
-  const calculateRecommendations = (a: Answers): TourBase[] => {
+  const getPool = (region: Region): TourBase[] => {
     let pool: TourBase[] = [];
-    if (a.region === "xalqaro") pool = TOURS;
-    else if (a.region === "ichki") pool = DOMESTIC_TOURS.filter((t) => t.country === "O'zbekiston");
-    else if (a.region === "qoshni") pool = DOMESTIC_TOURS.filter((t) => t.country !== "O'zbekiston");
+    if (region === "xalqaro") pool = TOURS;
+    else if (region === "ichki") pool = DOMESTIC_TOURS.filter((t) => t.country === "O'zbekiston");
+    else if (region === "qoshni") pool = DOMESTIC_TOURS.filter((t) => t.country !== "O'zbekiston");
     else pool = [...TOURS, ...DOMESTIC_TOURS];
+    return pool;
+  };
 
-    return pool
-      .filter((t) => {
-        const price = t.currency === "som" ? t.price / 12800 : t.price;
-        const budgetOk = price <= a.budget + 200;
-        const daysOk = Math.abs(t.days - a.days) <= 4;
-        const typeOk =
-          a.type === "" ||
-          t.title.toLowerCase().includes(a.type) ||
-          (t as any).category?.includes(a.type);
-        return budgetOk && daysOk && typeOk;
-      })
-      .sort((a, b) => a.price - b.price)
+  const toUsd = (tour: TourBase) => (tour.currency === "som" ? tour.price / USD_RATE : tour.price);
+  const selectedBudgetUsd = (a: Answers) =>
+    a.region === "xalqaro" ? a.budget : a.budget / USD_RATE;
+
+  const textProfile = (tour: TourBase) =>
+    [
+      tour.title,
+      tour.city,
+      tour.country,
+      tour.tag,
+      (tour as { category?: string }).category,
+      ...tour.includes,
+      ...tour.itinerary.map((item) => item.text),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+  const calculateRecommendations = (a: Answers): TourMatch[] => {
+    const pool = getPool(a.region);
+    const budgetUsd = selectedBudgetUsd(a);
+
+    const ranked = pool.map((tour) => {
+      const priceUsd = toUsd(tour);
+      const profile = textProfile(tour);
+      const reasons: string[] = [];
+      const warnings: string[] = [];
+      let score = 0;
+
+      const budgetGap = priceUsd - budgetUsd;
+      const budgetRatio = budgetUsd > 0 ? priceUsd / budgetUsd : 10;
+      if (budgetGap <= 0) {
+        const closeness = 1 - Math.min(Math.abs(budgetGap) / Math.max(budgetUsd, 1), 1);
+        score += 38 + closeness * 12;
+        reasons.push("Byudjet ichida");
+      } else if (budgetRatio <= 1.12) {
+        score += 34;
+        reasons.push("Byudjetga juda yaqin");
+        warnings.push("Narx byudjetdan biroz yuqori");
+      } else if (budgetRatio <= 1.3) {
+        score += 22;
+        warnings.push("Byudjetni biroz oshirish kerak");
+      } else {
+        score += Math.max(4, 18 - (budgetRatio - 1.3) * 20);
+        warnings.push("Byudjetdan sezilarli yuqori");
+      }
+
+      const dayGap = Math.abs(tour.days - a.days);
+      if (dayGap === 0) {
+        score += 18;
+        reasons.push("Kunlar soni aynan mos");
+      } else if (dayGap <= 2) {
+        score += 14;
+        reasons.push("Davomiyligi yaqin");
+      } else if (dayGap <= 4) {
+        score += 8;
+      } else {
+        warnings.push("Davomiyligi tanlovdan uzoqroq");
+      }
+
+      const typeWords = TYPE_ALIASES[a.type] ?? [a.type];
+      const typeHits = typeWords.filter((word) => profile.includes(word)).length;
+      const category = (tour as { category?: string }).category;
+      if (!a.type || category === a.type || typeHits >= 2) {
+        score += 18;
+        reasons.push("Dam olish uslubiga mos");
+      } else if (typeHits === 1 || (a.type === "tarix" && category === "tarixiy")) {
+        score += 12;
+        reasons.push("Qiziqishingizga yaqin");
+      } else {
+        score += 4;
+      }
+
+      const seasonWords = SEASON_ALIASES[a.month] ?? [];
+      const seasonProfile = `${tour.nextDates.join(" ")} ${tour.tag ?? ""}`.toLowerCase();
+      const seasonMatch = seasonWords.some((word) => seasonProfile.includes(word));
+      if (!a.month || seasonMatch || tour.nextDates.some((date) => date.toLowerCase().includes("har"))) {
+        score += 8;
+        reasons.push("Mavsum bo'yicha qulay");
+      } else {
+        score += 3;
+      }
+
+      score += Math.min(8, Math.max(0, (tour.rating - 4.4) * 12));
+      if (tour.rating >= 4.8) reasons.push("Reytingi yuqori");
+
+      if (tour.oldPrice) {
+        score += 5;
+        reasons.push("Chegirma bor");
+      }
+      if (tour.seatsLeft <= 6) {
+        score += 3;
+        reasons.push("Tez bron qilish kerak");
+      } else if (tour.seatsLeft >= 10) {
+        score += 2;
+      }
+      if (tour.reviews >= 250) score += 3;
+
+      return {
+        tour,
+        score: Math.round(Math.max(0, Math.min(score, 100))),
+        reasons: [...new Set(reasons)].slice(0, 4),
+        warnings: [...new Set(warnings)].slice(0, 2),
+        priceUsd,
+      };
+    });
+
+    return ranked
+      .sort((a, b) => b.score - a.score || a.priceUsd - b.priceUsd)
       .slice(0, 6);
   };
 
-  const generateFeedback = (a: Answers, tours: TourBase[]): string[] => {
+  const generateFeedback = (a: Answers, tours: TourMatch[]): string[] => {
     const msgs: string[] = [];
-    if (tours.length > 0) {
-      msgs.push(`${tours.length} ta tur sizning talablaringizga mos keldi.`);
+    const strongMatches = tours.filter((item) => item.score >= 70).length;
+    if (strongMatches > 0) {
+      msgs.push(`${strongMatches} ta tur talablaringizga kuchli mos keldi.`);
+    } else if (tours.length > 0) {
+      msgs.push("Aniq moslik kam, lekin eng yaqin va narxi mantiqli variantlarni saraladik.");
     } else {
       msgs.push("Aniq moslik topilmadi, lekin quyidagi variantlarni ko'rib chiqing.");
     }
@@ -159,6 +288,7 @@ export default function TourAnalyzer() {
     setStep(0);
     setAnswers({ region: "", type: "", days: 5, budget: 900, month: "" });
     setResult([]);
+    setHasAnalyzed(false);
     setFeedback([]);
   };
 
@@ -177,7 +307,7 @@ export default function TourAnalyzer() {
       </div>
 
       <div className="mx-auto mt-12 max-w-2xl px-4 sm:px-6">
-        {result.length === 0 ? (
+        {!hasAnalyzed ? (
           <div className="rounded-3xl bg-surface p-8 ring-1 ring-black/5">
             <div className="mb-6 flex justify-between text-xs font-bold text-ink-soft">
               <span>SAVOL {step + 1} / {QUESTIONS(currentRegion).length + 1}</span>
@@ -218,26 +348,54 @@ export default function TourAnalyzer() {
 
             {result.length > 0 ? (
               <div className="mt-8 grid gap-6 sm:grid-cols-2">
-                {result.map((t, i) => (
+                {result.map((item, i) => {
+                  const t = item.tour;
+                  return (
                   <button
                     key={i}
                     onClick={() => setSelectedTour(t)}
                     className="group rounded-2xl bg-white p-5 text-left ring-1 ring-black/10 transition hover:-translate-y-1 hover:shadow-xl"
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-display text-lg font-extrabold tracking-tight text-ink">{t.title}</p>
                         <p className="text-sm text-ink-soft">{t.city}, {t.country}</p>
                       </div>
-                      <span className="font-display text-xl font-extrabold text-emerald-700">
-                        {formatPrice(t.price, t.currency)}
-                      </span>
+                      <div className="text-right">
+                        <span className="font-display text-xl font-extrabold text-emerald-700">
+                          {formatPrice(t.price, t.currency)}
+                        </span>
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-extrabold text-emerald-700">
+                          <TrendingUp className="h-3 w-3" />
+                          {item.score}%
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-3 text-xs text-ink-soft">
                       {t.days} kun / {t.nights} tun · {t.rating} ★
                     </div>
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {item.reasons.map((reason) => (
+                        <span
+                          key={reason}
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-100"
+                        >
+                          <BadgeCheck className="h-3 w-3" />
+                          {reason}
+                        </span>
+                      ))}
+                      {item.warnings.map((warning) => (
+                        <span
+                          key={warning}
+                          className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-100"
+                        >
+                          {warning}
+                        </span>
+                      ))}
+                    </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="mt-8 rounded-2xl bg-amber-50 p-6 text-center ring-1 ring-amber-200">

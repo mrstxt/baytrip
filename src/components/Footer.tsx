@@ -1,7 +1,7 @@
 import { CheckCircle2, Send } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "../store";
-import { BayMark } from "./Brand";
+import { BrandLogo } from "./Brand";
 import Reveal from "./Reveal";
 
 const COLS = [
@@ -84,12 +84,11 @@ export default function Footer() {
         <div className="-mt-4 grid grid-cols-2 gap-10 pb-10 md:grid-cols-5 sm:-mt-8">
           <div className="col-span-2">
             <a href="#home" className="flex items-center gap-2.5">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-600 text-white">
-                <BayMark className="h-7 w-7" />
-              </span>
-              <span className="font-display text-xl font-extrabold">
-                bay<span className="text-aqua">Trip</span>
-              </span>
+              <BrandLogo
+                theme="dark"
+                imageClassName="h-12 max-w-[168px] rounded-xl bg-white px-2 py-1.5"
+                markClassName="h-10 w-10 rounded-xl"
+              />
             </a>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-slate-400">
               Toshkentdagi rasmiy tur agentligi. Aviachiptalar, mehmonxonalar va

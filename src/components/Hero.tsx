@@ -1,5 +1,32 @@
-import { ArrowRight, Globe2, Mountain, Palmtree, Plane } from "lucide-react";
+import { ArrowRight, Camera, Car, Compass, Globe2, Hotel, Luggage, Map, Mountain, Palmtree, Plane, ShieldCheck } from "lucide-react";
+import type { ReactNode } from "react";
 import { Bubble, RainbowArc, Wave } from "./Brand";
+
+function FeatureChip({
+  className,
+  icon,
+  title,
+  text,
+}: {
+  className?: string;
+  icon: ReactNode;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div
+      className={`absolute z-20 flex min-h-[72px] w-[178px] items-center gap-3 rounded-2xl bg-white/95 px-4 py-3 text-ink shadow-2xl shadow-brand-950/20 ring-1 ring-white/60 backdrop-blur-xl lg:w-[190px] ${className ?? ""}`}
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-600 text-white">
+        {icon}
+      </span>
+      <span>
+        <span className="block text-[13px] font-extrabold leading-none">{title}</span>
+        <span className="mt-1 block text-[11px] font-bold leading-none text-ink-soft">{text}</span>
+      </span>
+    </div>
+  );
+}
 
 export default function Hero() {
   const goTours = () => document.getElementById("turlar")?.scrollIntoView({ behavior: "smooth" });
@@ -23,7 +50,7 @@ export default function Hero() {
         <RainbowArc className="absolute -left-24 bottom-4 hidden h-80 w-80 opacity-95 lg:block" flip />
       </div>
 
-      <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pb-24 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28">
+      <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pb-24 sm:px-6 md:gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:pb-28">
         {/* matn — Apple uslubida ulkan tipografika */}
         <div className="max-w-2xl">
           <p className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.22em] text-white/90 ring-1 ring-white/25 animate-rise">
@@ -62,21 +89,59 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* brend pufakchalari */}
-        <div className="relative hidden h-[400px] lg:block" aria-hidden>
-          <Bubble className="left-2 top-4 h-24 w-24 animate-floaty" color="bg-aqua" tail="bl">
-            <Globe2 className="h-11 w-11" strokeWidth={1.8} />
+        {/* brend pufakchalari va xizmat signallari */}
+        <div className="relative mx-auto hidden h-[500px] w-full max-w-[560px] md:block lg:h-[450px]">
+          <div className="absolute inset-x-4 bottom-0 top-0 rounded-[40px] bg-white/[0.04] ring-1 ring-white/10" />
+
+          <Bubble className="absolute left-5 top-5 z-0 h-20 w-20 animate-floaty lg:left-2 lg:top-8 lg:h-24 lg:w-24" color="bg-aqua" tail="bl">
+            <Globe2 className="h-9 w-9 lg:h-11 lg:w-11" strokeWidth={1.8} />
           </Bubble>
-          <Bubble className="right-6 top-0 h-28 w-28 animate-floaty-slow" color="bg-sun" iconColor="text-tangerine" tail="bl">
-            <Palmtree className="h-12 w-12" strokeWidth={2} />
+          <Bubble className="absolute right-8 top-4 z-0 h-24 w-24 animate-floaty-slow lg:right-8 lg:top-2 lg:h-28 lg:w-28" color="bg-sun" iconColor="text-tangerine" tail="bl">
+            <Palmtree className="h-10 w-10 lg:h-12 lg:w-12" strokeWidth={2} />
           </Bubble>
-          <Bubble className="left-[34%] top-[40%] h-32 w-32 animate-floaty-slower" color="bg-aqua" iconColor="text-brand-700" tail="tr">
-            <Plane className="h-14 w-14 -rotate-12" strokeWidth={2} />
+          <Bubble className="absolute left-1/2 top-[42%] z-0 h-24 w-24 -translate-x-1/2 animate-floaty-slower lg:top-[41%] lg:h-28 lg:w-28" color="bg-aqua" iconColor="text-brand-700" tail="tr">
+            <Plane className="h-11 w-11 -rotate-12 lg:h-12 lg:w-12" strokeWidth={2} />
           </Bubble>
-          <Bubble className="bottom-4 right-0 h-24 w-24 animate-floaty" color="bg-tangerine" tail="tl">
-            <Mountain className="h-10 w-10" strokeWidth={2} />
+          <Bubble className="absolute bottom-10 right-4 z-0 h-20 w-20 animate-floaty lg:bottom-10 lg:right-0 lg:h-24 lg:w-24" color="bg-tangerine" tail="tl">
+            <Mountain className="h-9 w-9 lg:h-10 lg:w-10" strokeWidth={2} />
           </Bubble>
-          <RainbowArc className="absolute -right-12 bottom-8 h-52 w-52 animate-floaty-slow" />
+          <Bubble className="absolute left-[43%] top-[9%] z-0 h-16 w-16 animate-floaty lg:top-[8%] lg:h-[72px] lg:w-[72px]" color="bg-tangerine" iconColor="text-white" tail="tr">
+            <Camera className="h-7 w-7 lg:h-8 lg:w-8" strokeWidth={2} />
+          </Bubble>
+          <Bubble className="absolute bottom-12 left-6 z-0 h-[68px] w-[68px] animate-floaty-slower lg:left-5 lg:bottom-12 lg:h-20 lg:w-20" color="bg-white" iconColor="text-tangerine" tail="tl">
+            <Luggage className="h-8 w-8 lg:h-9 lg:w-9" strokeWidth={2} />
+          </Bubble>
+          <Bubble className="absolute bottom-4 left-[48%] z-0 h-16 w-16 animate-floaty lg:bottom-3 lg:h-[72px] lg:w-[72px]" color="bg-sun" iconColor="text-brand-700" tail="bl">
+            <Compass className="h-7 w-7 lg:h-8 lg:w-8" strokeWidth={2} />
+          </Bubble>
+          <Bubble className="absolute right-5 top-[43%] z-0 h-16 w-16 animate-floaty-slow lg:right-2 lg:top-[44%] lg:h-[72px] lg:w-[72px]" color="bg-aqua" iconColor="text-white" tail="br">
+            <Map className="h-7 w-7 lg:h-8 lg:w-8" strokeWidth={2} />
+          </Bubble>
+
+          <FeatureChip
+            className="left-8 top-[118px] animate-floaty lg:left-5 lg:top-[118px]"
+            icon={<Plane className="h-5 w-5" strokeWidth={2.2} />}
+            title="Aviachipta"
+            text="qulay reyslar"
+          />
+          <FeatureChip
+            className="right-8 top-[132px] animate-floaty-slow lg:right-5 lg:top-[128px]"
+            icon={<Hotel className="h-5 w-5" strokeWidth={2.2} />}
+            title="Mehmonxona"
+            text="tekshirilgan joylar"
+          />
+          <FeatureChip
+            className="bottom-[116px] left-8 animate-floaty-slower lg:bottom-[92px] lg:left-5"
+            icon={<Car className="h-5 w-5" strokeWidth={2.2} />}
+            title="Transfer"
+            text="kutib olish"
+          />
+          <FeatureChip
+            className="bottom-[88px] right-8 animate-floaty lg:bottom-[66px] lg:right-5"
+            icon={<ShieldCheck className="h-5 w-5" strokeWidth={2.2} />}
+            title="Hujjatlar"
+            text="viza yordami"
+          />
         </div>
       </div>
 

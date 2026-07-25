@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../utils/cn";
 
 /** bayTrip logotipi — palm daraxti kvadrat ichida (brend rasmdagi kabi) */
@@ -14,6 +14,56 @@ export function BayMark({ className }: { className?: string }) {
         <path d="M30.8 28.4h2.4l-.9 17.2c-.7.6-1.9.6-2.6 0l1.1-17.2z" />
       </g>
     </svg>
+  );
+}
+
+export function BrandLogo({
+  className,
+  imageClassName,
+  markClassName,
+  showName = true,
+  theme = "light",
+}: {
+  className?: string;
+  imageClassName?: string;
+  markClassName?: string;
+  showName?: boolean;
+  theme?: "hero" | "light" | "dark";
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const nameAccent =
+    theme === "hero" ? "text-sun" : theme === "dark" ? "text-aqua" : "text-brand-600";
+
+  if (!imageFailed) {
+    return (
+      <span className={cn("inline-flex items-center", className)}>
+        <img
+          src="/logo.png"
+          alt="bayTrip"
+          className={cn("h-10 w-auto max-w-[152px] object-contain", imageClassName)}
+          onError={() => setImageFailed(true)}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className={cn("inline-flex items-center gap-2", className)}>
+      <span
+        className={cn(
+          "grid h-9 w-9 place-items-center rounded-full",
+          theme === "hero" ? "bg-white text-brand-600" : "bg-brand-600 text-white",
+          markClassName
+        )}
+      >
+        <BayMark className="h-6 w-6" />
+      </span>
+      {showName && (
+        <span className="font-display text-lg font-extrabold tracking-tight">
+          bay<span className={nameAccent}>Trip</span>
+        </span>
+      )}
+    </span>
   );
 }
 
