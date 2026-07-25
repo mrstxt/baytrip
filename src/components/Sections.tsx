@@ -1,28 +1,21 @@
-import { useState } from "react";
+"use client";
+
+import { useState, useEffect } from "react";
 import {
   BadgeCheck,
-  CheckCircle2,
   ChevronDown,
   ClipboardList,
   CreditCard,
   Headset,
-  Info,
-  MapPin,
   PlaneTakeoff,
   Search,
-  Send,
   ShieldCheck,
-  Clock,
-  MessageCircle,
-  Phone,
   Wallet,
   X,
-  XCircle,
-  Globe2,
+  CheckCircle2,
 } from "lucide-react";
-import { FAQS, TESTIMONIALS } from "../data";
-import { useApp } from "../store";
-import { cn } from "../utils/cn";
+import { FAQS, TESTIMONIALS } from "@/lib/data";
+import { cn } from "@/lib/cn";
 import { Bubble } from "./Brand";
 import Reveal from "./Reveal";
 import { Stars } from "./ui";
@@ -151,7 +144,7 @@ export function Testimonials() {
                   <Stars rating={t.rating} />
                   <span className="rounded-full bg-brand-50 px-3 py-1 text-[11px] font-bold text-brand-700">{t.trip}</span>
                 </div>
-                <blockquote className="mt-4 text-[15px] leading-relaxed text-ink">“{t.quote}”</blockquote>
+                <blockquote className="mt-4 text-[15px] leading-relaxed text-ink">"{t.quote}"</blockquote>
                 <figcaption className="mt-5 flex items-center gap-3">
                   <span className={cn("grid h-11 w-11 place-items-center rounded-full text-sm font-extrabold text-white", t.hue)}>
                     {t.name.split(" ").map((w) => w[0]).join("")}
@@ -213,154 +206,162 @@ export function Faq() {
 /* ---------------- Aloqa ---------------- */
 
 export function Contact() {
-  const { toast } = useApp();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
-  const [done, setDone] = useState(false);
+  const [sent, setSent] = useState(false);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim().length < 3) return setErr("Ismingizni kiriting.");
-    if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
-    setErr("");
-    setDone(true);
-    toast("Rahmat! Menejerimiz tez orada bog'lanadi.");
+    if (name.trim().length < 2 || phone.trim().length < 5) return;
+    setSent(true);
   };
 
   return (
-    <section id="aloqa" className="relative scroll-mt-24 overflow-hidden bg-brand-950 py-20 text-white sm:py-24">
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="absolute -left-24 top-0 h-80 w-80 rounded-full bg-brand-600/30 blur-3xl" />
-        <div className="absolute -right-20 bottom-0 h-96 w-96 rounded-full bg-tangerine/15 blur-3xl" />
-      </div>
-      <div className="relative mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 sm:px-6 lg:grid-cols-2">
-        <Reveal>
-          <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.24em] text-sun">Aloqa</p>
-          <h2 className="font-display text-4xl font-extrabold tracking-[-0.03em] sm:text-5xl">
-            Keling, sayohatni boshlaymiz.
-          </h2>
-          <p className="mt-3 max-w-md text-brand-200">
-            Ofisga tashrif buyuring, qo'ng'iroq qiling yoki ariza qoldiring —
-            qaysi biri qulay bo'lsa.
-          </p>
-          <ul className="mt-8 space-y-4">
-            {[
-              { icon: Phone, label: "Telefon", value: "+998 95 748 59 95", href: "tel:+998957485995" },
-              { icon: MessageCircle, label: "Telegram kanal", value: "@baytripuz", href: "https://t.me/baytripuz" },
-              { icon: Globe2, label: "Instagram (Ichki turizm)", value: "@baytrip.uz", href: "https://instagram.com/baytrip.uz" },
-              { icon: Globe2, label: "Instagram (Tashqi turizm)", value: "@baytrip.travel", href: "https://instagram.com/baytrip.travel" },
-              { icon: MapPin, label: "Manzil", value: "Toshkent sh., Amir Temur shoh ko'chasi 12", href: undefined },
-              { icon: Clock, label: "Ish vaqti", value: "Dush–Shan: 9:00 – 19:00", href: undefined },
-            ].map((c) => {
-              const Icon = c.icon;
-              return (
-                <li key={c.label} className="flex items-start gap-4">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/10 text-sun ring-1 ring-white/15">
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-brand-300">{c.label}</p>
-                    {c.href ? (
-                      <a
-                        href={c.href}
-                        target={c.href.startsWith("http") ? "_blank" : undefined}
-                        rel="noreferrer"
-                        className="mt-0.5 inline-block text-sm font-bold text-white transition hover:text-sun hover:underline"
-                      >
-                        {c.value}
-                      </a>
-                    ) : (
-                      <p className="mt-0.5 text-sm font-semibold text-white">{c.value}</p>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </Reveal>
+    <section id="aloqa" className="scroll-mt-24 overflow-hidden bg-gradient-to-br from-brand-600 to-brand-800 py-20 text-white sm:py-28">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-2">
+          <Reveal>
+            <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.24em] text-sun">Aloqa</p>
+            <h2 className="font-display text-4xl font-extrabold leading-[1.05] tracking-[-0.03em] sm:text-[3.2rem]">
+              Keling, <span className="text-sun">suhbat</span> quramiz.
+            </h2>
+            <p className="mt-4 max-w-md text-lg leading-relaxed text-white/75">
+              Ism va telefon raqamingizni qoldiring — menejerimiz sizga 15 daqiqa ichida
+              qo'ng'iroq qiladi va barcha savollarga javob beradi.
+            </p>
+            <div className="mt-8 space-y-4">
+              {[
+                { label: "Telefon", value: "+998 95 748 59 95", href: "tel:+998957485995" },
+                { label: "Email", value: "hello@baytrip.uz", href: "mailto:hello@baytrip.uz" },
+                { label: "Manzil", value: "Toshkent, Amir Temur ko'ch. 12" },
+              ].map((c) => (
+                <div key={c.label} className="flex items-center gap-3 text-sm">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-sun/80">{c.label}</span>
+                  {c.href ? (
+                    <a href={c.href} className="font-bold text-white/90 hover:text-sun transition">{c.value}</a>
+                  ) : (
+                    <span className="font-bold text-white/90">{c.value}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Reveal>
 
-        <Reveal delay={120}>
-          <div className="rounded-3xl bg-white p-6 text-ink shadow-2xl shadow-brand-950/40 sm:p-8">
-            {done ? (
-              <div className="flex flex-col items-center py-14 text-center">
-                <span className="grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-emerald-600 animate-pop">
-                  <CheckCircle2 className="h-8 w-8" />
-                </span>
-                <h3 className="mt-5 font-display text-xl font-extrabold">Arizangiz qabul qilindi!</h3>
-                <p className="mt-2 max-w-xs text-sm text-ink-soft">
-                  Ish vaqtida 15 daqiqa ichida javob beramiz. Rahmat, {name.split(" ")[0]}!
-                </p>
+          <Reveal delay={120}>
+            {sent ? (
+              <div className="flex flex-col items-center rounded-3xl bg-white/10 py-16 text-center ring-1 ring-white/10 backdrop-blur-sm">
+                <CheckCircle2 className="h-12 w-12 text-sun" />
+                <h4 className="mt-5 font-display text-xl font-extrabold">Xabaringiz qabul qilindi!</h4>
+                <p className="mt-2 max-w-xs text-sm text-white/70">Tez orada siz bilan bog'lanamiz.</p>
               </div>
             ) : (
-              <form onSubmit={submit}>
-                <h3 className="font-display text-xl font-extrabold">Qo'ng'iroq buyurtma qilish</h3>
-                <p className="mt-1 text-sm text-ink-soft">Ma'lumotlaringizni qoldiring — biz sizga qayta aloqaga chiqamiz.</p>
-                <label className="mt-5 block">
-                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Ismingiz</span>
+              <form onSubmit={submit} className="rounded-3xl bg-white/10 p-6 ring-1 ring-white/10 backdrop-blur-sm sm:p-8">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-wide text-white/60">Ismingiz</span>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Aziza Karimova"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    placeholder="Alisher"
+                    className="w-full rounded-xl bg-white/95 px-4 py-3.5 text-sm font-semibold text-ink placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sun"
                   />
                 </label>
-                <label className="mt-3 block">
-                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Telefon</span>
+                <label className="mt-4 block">
+                  <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-wide text-white/60">Telefon raqam</span>
                   <input
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="+998 95 748 59 95"
-                    inputMode="tel"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    className="w-full rounded-xl bg-white/95 px-4 py-3.5 text-sm font-semibold text-ink placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sun"
                   />
                 </label>
-                <label className="mt-3 block">
-                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Qaysi tur qiziqtiradi? (ixtiyoriy)</span>
+                <label className="mt-4 block">
+                  <span className="mb-1.5 block text-xs font-extrabold uppercase tracking-wide text-white/60">Xabar (ixtiyoriy)</span>
                   <textarea
                     value={msg}
                     onChange={(e) => setMsg(e.target.value)}
+                    placeholder="Savol yoki taklifingiz..."
                     rows={3}
-                    placeholder="Masalan: iyul oyida 2 kishiga Maldiv…"
-                    className="w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    className="w-full rounded-xl bg-white/95 px-4 py-3.5 text-sm font-semibold text-ink placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sun"
                   />
                 </label>
-                {err && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">{err}</p>}
                 <button
                   type="submit"
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 py-4 text-sm font-extrabold text-white shadow-lg shadow-brand-600/30 transition-all hover:shadow-xl hover:shadow-brand-600/40 hover:brightness-110 active:scale-[0.98]"
+                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-sun px-6 py-3.5 text-sm font-extrabold text-ink shadow-xl shadow-brand-950/30 transition-all hover:bg-amber-300 active:scale-95"
                 >
-                  <Send className="h-4 w-4" /> Yuborish
+                  <SendContactIcon /> Jo'natish
                 </button>
               </form>
             )}
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
 }
 
-/* ---------------- Toast host ---------------- */
+function SendContactIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 2L11 13" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+    </svg>
+  );
+}
+
+/* ---------------- Tost ---------------- */
+
+type Toast = { id: number; message: string; tone: "success" | "info" | "error" };
+
+// Global toast state
+let toastsState: Toast[] = [];
+let toastListeners: (() => void)[] = [];
+
+function emitToast(message: string, tone: Toast["tone"] = "success") {
+  const id = Date.now();
+  toastsState = [...toastsState.slice(-2), { id, message, tone }];
+  toastListeners.forEach((l) => l());
+  setTimeout(() => {
+    toastsState = toastsState.filter((t) => t.id !== id);
+    toastListeners.forEach((l) => l());
+  }, 4200);
+}
+
+export function useToast() {
+  return emitToast;
+}
 
 export function ToastHost() {
-  const { toasts, dismissToast } = useApp();
-  const icons = {
-    success: <CheckCircle2 className="h-5 w-5 text-emerald-500" />,
-    info: <Info className="h-5 w-5 text-brand-500" />,
-    error: <XCircle className="h-5 w-5 text-rose-500" />,
-  };
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const listener = () => setTick((t) => t + 1);
+    toastListeners.push(listener);
+    return () => {
+      toastListeners = toastListeners.filter((l) => l !== listener);
+    };
+  }, []);
+
   return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[90] flex w-[calc(100%-2.5rem)] max-w-sm flex-col gap-2.5">
-      {toasts.map((t) => (
+    <div className="fixed bottom-6 left-1/2 z-[100] flex -translate-x-1/2 flex-col gap-2">
+      {toastsState.map((t) => (
         <div
           key={t.id}
-          className="pointer-events-auto flex items-start gap-3 rounded-2xl bg-white p-4 shadow-2xl shadow-brand-950/25 ring-1 ring-slate-100 animate-rise"
+          className={cn(
+            "animate-pop flex items-center gap-2.5 rounded-2xl px-5 py-3.5 text-sm font-bold shadow-xl backdrop-blur-md ring-1",
+            t.tone === "success" && "bg-emerald-600/95 text-white ring-emerald-400/30",
+            t.tone === "error" && "bg-hot/95 text-white ring-rose-300/30",
+            t.tone === "info" && "bg-brand-600/95 text-white ring-brand-400/30"
+          )}
         >
-          {icons[t.tone]}
-          <p className="flex-1 text-sm font-semibold text-ink">{t.message}</p>
-          <button aria-label="Yopish" onClick={() => dismissToast(t.id)} className="text-slate-300 transition hover:text-ink">
+          {t.message}
+          <button
+            onClick={() => {
+              toastsState = toastsState.filter((x) => x.id !== t.id);
+              toastListeners.forEach((l) => l());
+            }}
+            className="ml-2 opacity-70 hover:opacity-100"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

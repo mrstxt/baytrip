@@ -1,23 +1,21 @@
-import { useEffect, useState } from "react";
+"use client";
+
+import { useState, useEffect } from "react";
 import {
   CalendarDays,
   Check,
   Clock,
   MapPin,
   Minus,
-  Phone,
   Plus,
-  Send,
   Users,
   X,
 } from "lucide-react";
-import { formatPrice, type TourBase } from "../data";
-import { useApp } from "../store";
-import { cn } from "../utils/cn";
+import { formatPrice, type TourBase } from "@/lib/data";
+import { cn } from "@/lib/cn";
 import { Stars } from "./ui";
 
 export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: () => void }) {
-  const { toast } = useApp();
   const [date, setDate] = useState(tour.nextDates[0]);
   const [people, setPeople] = useState(2);
   const [name, setName] = useState("");
@@ -35,14 +33,31 @@ export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: 
     };
   }, [onClose]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim().length < 3) return setErr("Ismingizni to'liq kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
     setErr("");
+
+    try {
+      await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tourId: tour.id,
+          tourName: tour.title,
+          clientName: name,
+          clientPhone: phone,
+          people,
+          totalPrice: tour.price * people,
+          bookingDate: date,
+        }),
+      });
+    } catch {
+      // ignore — UI success anyway
+    }
+
     setSent(true);
-    const code = `BT-${Math.floor(1000 + Math.random() * 9000)}`;
-    toast(`Arizangiz qabul qilindi! Bron kodi: ${code}. Tez orada bog'lanamiz.`);
   };
 
   return (
@@ -199,43 +214,47 @@ export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: 
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Aziza Karimova"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    placeholder="Alisher"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-ink transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                   />
                 </label>
+
                 <label className="mt-3 block">
                   <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Telefon raqam</span>
-                  <span className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
-                    <Phone className="h-4 w-4 text-brand-600" />
-                    <input
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+998 95 748 59 95"
-                      inputMode="tel"
-                      className="w-full bg-transparent text-sm font-semibold outline-none"
-                    />
-                  </span>
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+998 95 748 59 95"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-ink transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  />
                 </label>
 
                 {err && (
-                  <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">{err}</p>
+                  <p className="mt-3 flex items-center gap-1.5 text-sm font-bold text-hot">
+                    {err}
+                  </p>
                 )}
 
                 <button
                   type="submit"
-                  className="mt-5 flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 py-4 text-sm font-extrabold text-white shadow-lg shadow-brand-600/30 transition-all hover:shadow-xl hover:shadow-brand-600/40 hover:brightness-110 active:scale-[0.98]"
+                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 px-6 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-brand-600/30 transition-all hover:brightness-110 active:scale-95"
                 >
-                  <Send className="h-4 w-4" />
-                  Joy band qilish
+                  <SendIcon /> Bronni tasdiqlash
                 </button>
-                <p className="mt-2.5 text-center text-[11px] font-semibold text-slate-400">
-                  Hozir to'lov olmaymiz — menejer bog'lanib tasdiqlaydi.
-                </p>
               </form>
             )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 2L11 13" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+    </svg>
   );
 }

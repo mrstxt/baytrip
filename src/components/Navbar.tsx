@@ -1,14 +1,16 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { Menu, Phone, X } from "lucide-react";
-import { cn } from "../utils/cn";
+import { cn } from "@/lib/cn";
 import { BayMark } from "./Brand";
 
 const LINKS = [
   { id: "turlar", label: "Turlar" },
   { id: "ichki-turizm", label: "Ichki turizm" },
+  { id: "obuna", label: "Obuna" },
+  { id: "analiz", label: "Tur analiz" },
   { id: "haqimizda", label: "Biz haqimizda" },
-  { id: "fikrlar", label: "Mijozlar" },
-  { id: "savollar", label: "Savollar" },
   { id: "aloqa", label: "Aloqa" },
 ];
 
@@ -25,7 +27,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    const ids = ["home", "turlar", "ichki-turizm", "haqimizda", "fikrlar", "savollar", "aloqa"];
+    const ids = ["home", "turlar", "ichki-turizm", "obuna", "analiz", "haqimizda", "fikrlar", "savollar", "aloqa"];
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setActive(e.target.id)),
       { rootMargin: "-40% 0px -55% 0px" }

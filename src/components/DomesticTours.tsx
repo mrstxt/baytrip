@@ -1,7 +1,9 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { Clock, Compass, MapPin, Sparkles, Star } from "lucide-react";
-import { DOMESTIC_CATEGORIES, DOMESTIC_TOURS, formatPrice, type DomesticTour } from "../data";
-import { cn } from "../utils/cn";
+import { DOMESTIC_CATEGORIES, DOMESTIC_TOURS, formatPrice, type DomesticTour } from "@/lib/data";
+import { cn } from "@/lib/cn";
 import { BrandPattern } from "./Brand";
 import Reveal from "./Reveal";
 import TourModal from "./TourModal";
@@ -15,7 +17,7 @@ const InstagramIcon = ({ className }: { className?: string }) => (
 );
 
 export default function DomesticTours() {
-  const [category, setCategory] = useState<(typeof DOMESTIC_CATEGORIES)[number]["id"]>("all");
+  const [category, setCategory] = useState<string>("all");
   const [selected, setSelected] = useState<DomesticTour | null>(null);
 
   const filtered = useMemo(
@@ -53,7 +55,6 @@ export default function DomesticTours() {
             </a>
           </div>
 
-          {/* segment-kontrol filtri */}
           <div className="flex flex-wrap gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-black/5">
             {DOMESTIC_CATEGORIES.map((c) => (
               <button

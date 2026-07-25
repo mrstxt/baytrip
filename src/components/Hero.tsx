@@ -1,3 +1,5 @@
+"use client";
+
 import { ArrowRight, Globe2, Mountain, Palmtree, Plane } from "lucide-react";
 import { Bubble, RainbowArc, Wave } from "./Brand";
 
@@ -6,7 +8,6 @@ export default function Hero() {
 
   return (
     <section id="home" className="relative overflow-hidden bg-brand-600 pt-36 sm:pt-40">
-      {/* qatlamli fon */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         <div className="absolute inset-0 bg-[radial-gradient(100%_80%_at_20%_0%,#2f83ff_0%,#1668f0_48%,#0f52cf_100%)]" />
         <div className="absolute -right-44 top-1/2 h-[1150px] w-[1150px] -translate-y-1/2 opacity-[0.12] animate-rays">
@@ -19,12 +20,10 @@ export default function Hero() {
           />
         </div>
         <div className="absolute -left-28 -top-24 h-80 w-80 rounded-full bg-aqua/25 blur-3xl" />
-        {/* brend kamalak — faqat desktop, CTA yonida */}
         <RainbowArc className="absolute -left-24 bottom-4 hidden h-80 w-80 opacity-95 lg:block" flip />
       </div>
 
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 pb-24 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:pb-28">
-        {/* matn — Apple uslubida ulkan tipografika */}
         <div className="max-w-2xl">
           <p className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.22em] text-white/90 ring-1 ring-white/25 animate-rise">
             bayTrip · Toshkent tur agentligi
@@ -62,7 +61,6 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* brend pufakchalari */}
         <div className="relative hidden h-[400px] lg:block" aria-hidden>
           <Bubble className="left-2 top-4 h-24 w-24 animate-floaty" color="bg-aqua" tail="bl">
             <Globe2 className="h-11 w-11" strokeWidth={1.8} />
@@ -80,7 +78,6 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* brend to'lqini — hero'dan turlarga uzluksiz o'tish */}
       <Wave className="relative block h-12 w-full text-white sm:h-20" />
     </section>
   );

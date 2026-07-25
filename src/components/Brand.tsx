@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
-import { cn } from "../utils/cn";
+"use client";
 
-/** bayTrip logotipi — palm daraxti kvadrat ichida (brend rasmdagi kabi) */
+import type { ReactNode } from "react";
+import { cn } from "@/lib/cn";
+
 export function BayMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} fill="none" aria-hidden>
@@ -17,7 +18,6 @@ export function BayMark({ className }: { className?: string }) {
   );
 }
 
-/** Brendning "gapiruvchi pufakcha" ikonkalari — globus, palma, samolyot, tog' */
 export function Bubble({
   color,
   iconColor = "text-white",
@@ -45,7 +45,6 @@ export function Bubble({
   );
 }
 
-/** Kamalak yoyi — brend bezagi */
 export function RainbowArc({ className, flip }: { className?: string; flip?: boolean }) {
   return (
     <svg
@@ -62,7 +61,6 @@ export function RainbowArc({ className, flip }: { className?: string; flip?: boo
   );
 }
 
-/** Brend fon naqshi — palma barglari va to'lqin yoylari (identika uslubida) */
 export function BrandPattern({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 600 400" fill="none" aria-hidden preserveAspectRatio="xMidYMid slice">
