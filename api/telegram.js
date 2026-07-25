@@ -28,6 +28,31 @@ function normalizeTelegramUsername(value) {
   return clean(value, "").replace(/^@+/, "");
 }
 
+async function readRequestBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return null;
+    }
+  }
+
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function getAdminProfileConfig() {
   const apiId = Number(process.env.TELEGRAM_API_ID);
   const apiHash = clean(process.env.TELEGRAM_API_HASH, "");
@@ -116,6 +141,24 @@ async function sendAdminPanel(token, chatId) {
       "💳 BayClub tarif narxlarini o'zgartirish",
     ].join("\n"),
     { reply_markup: buildAdminPanelKeyboard() }
+  );
+}
+
+async function sendLoginPrompt(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      LOGIN_REPLY_MARKER,
+      "",
+      "Admin loginni shu xabarga reply qilib yuboring.",
+    ].join("\n"),
+    {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "Login...",
+      },
+    }
   );
 }
 
@@ -334,6 +377,11 @@ async function handleBotUpdate(body, token) {
     if (!chatId) return { ok: true, ignored: true };
     await answerCallbackQuery(token, callback.id);
 
+    if (data === "login_start") {
+      await sendLoginPrompt(token, chatId);
+      return { ok: true };
+    }
+
     if (data === "promo_broadcast") {
       await sendBotMessage(
         token,
@@ -379,7 +427,7 @@ async function handleBotUpdate(body, token) {
     }
 
     if (data === "logout") {
-      await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login PAROL</code>");
+      await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>");
       return { ok: true };
     }
 
@@ -389,6 +437,12 @@ async function handleBotUpdate(body, token) {
   const message = body.message || body.edited_message;
   const text = clean(message?.text, "");
   const chatId = message?.chat?.id;
+
+  console.log("telegram update", {
+    kind: body.message ? "message" : body.edited_message ? "edited_message" : "unknown",
+    chatId,
+    text,
+  });
 
   if (!message || !chatId || !text) {
     return { ok: true, ignored: true };
@@ -450,27 +504,18 @@ async function handleBotUpdate(body, token) {
         "<code>/login</code>",
         "",
         "Login Vercel env ichidagi <code>TELEGRAM_BOT_ADMIN_LOGIN</code>, parol esa <code>TELEGRAM_BROADCAST_PASSWORD</code> qiymatidan olinadi.",
-      ].join("\n")
+      ].join("\n"),
+      {
+        reply_markup: {
+          inline_keyboard: [[{ text: "🔐 Login", callback_data: "login_start" }]],
+        },
+      }
     );
     return { ok: true };
   }
 
   if (text.startsWith("/login")) {
-    await sendBotMessage(
-      token,
-      chatId,
-      [
-        LOGIN_REPLY_MARKER,
-        "",
-        "Admin loginni shu xabarga reply qilib yuboring.",
-      ].join("\n"),
-      {
-        reply_markup: {
-          force_reply: true,
-          input_field_placeholder: "Login...",
-        },
-      }
-    );
+    await sendLoginPrompt(token, chatId);
     return { ok: true };
   }
 
@@ -701,13 +746,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "Telegram sozlamalari kiritilmagan." });
   }
 
-  let body = req.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      return res.status(400).json({ ok: false, error: "JSON formati noto'g'ri." });
-    }
+  const body = await readRequestBody(req);
+  if (!body) {
+    console.log("telegram endpoint empty or invalid json body");
+    return res.status(400).json({ ok: false, error: "JSON formati noto'g'ri." });
   }
 
   const isTelegramUpdate =
@@ -723,6 +765,8 @@ export default async function handler(req, res) {
     const result = await handleBotUpdate(body, token);
     return res.status(200).json(result);
   }
+
+  console.log("lead request", { type: body?.type ?? "missing" });
 
   const error = validateLead(body);
   if (error) {
