@@ -1,6 +1,7 @@
 const LEAD_LABELS = {
   "external-tour": "Tashqi tur paketi",
   "domestic-tour": "Ichki tur paketi",
+  "bayclub-card": "BayClub Card obunasi",
   contact: "Murojaat",
 };
 
@@ -41,6 +42,13 @@ function validateLead(body) {
     return "Telegram username noto'g'ri.";
   }
 
+  if (body.type === "bayclub-card") {
+    const required = ["cardType", "plan", "price"];
+    const missing = required.find((key) => clean(body[key], "") === "");
+    if (missing) return `BayClub ma'lumoti yetishmayapti: ${missing}.`;
+    return null;
+  }
+
   if (body.type !== "contact") {
     const required = ["tourTitle", "tourCity", "tourCountry", "date", "people", "price", "total"];
     const missing = required.find((key) => clean(body[key], "") === "");
@@ -54,6 +62,7 @@ function getTopicId(type) {
   const map = {
     "external-tour": process.env.TELEGRAM_EXTERNAL_TOPIC_ID,
     "domestic-tour": process.env.TELEGRAM_DOMESTIC_TOPIC_ID,
+    "bayclub-card": process.env.TELEGRAM_BAYCLUB_TOPIC_ID,
     contact: process.env.TELEGRAM_CONTACT_TOPIC_ID,
   };
 
@@ -69,6 +78,10 @@ function buildClientGreeting(body) {
   if (body.type === "contact") {
     const request = clean(body.message, "murojaatingiz");
     return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. Sayt orqali "${request}" bo'yicha murojaat qilgan ekansiz. Sizga yordam berish uchun yozdim.`;
+  }
+
+  if (body.type === "bayclub-card") {
+    return `Assalomu aleykum, ${name}. BayClub Card obunasi bo'yicha ariza qoldirgan ekansiz. ${clean(body.cardType)} karta va ${clean(body.plan)} tarif haqida batafsil ma'lumot berish uchun yozdim.`;
   }
 
   const destination = clean(body.tourCountry);
@@ -141,6 +154,14 @@ function buildMessage(body, profileDelivery) {
 
   if (body.type === "contact") {
     lines.push(`💬 <b>Xabar:</b> ${escapeHtml(clean(body.message, "Ko'rsatilmagan"))}`);
+  } else if (body.type === "bayclub-card") {
+    lines.push(
+      "",
+      `💳 <b>Karta turi:</b> ${escapeHtml(clean(body.cardType))}`,
+      `📆 <b>Obuna muddati:</b> ${escapeHtml(clean(body.plan))}`,
+      `💵 <b>Narx:</b> ${escapeHtml(clean(body.price))}`,
+      `🎁 <b>Chegirma:</b> Har bir tur paketiga 20%`
+    );
   } else {
     lines.push(
       "",

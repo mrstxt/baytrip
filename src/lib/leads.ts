@@ -1,4 +1,4 @@
-export type LeadType = "external-tour" | "domestic-tour" | "contact";
+export type LeadType = "external-tour" | "domestic-tour" | "contact" | "bayclub-card";
 
 export type TourLeadPayload = {
   type: "external-tour" | "domestic-tour";
@@ -24,7 +24,18 @@ export type ContactLeadPayload = {
   source: string;
 };
 
-export type LeadPayload = TourLeadPayload | ContactLeadPayload;
+export type BayClubLeadPayload = {
+  type: "bayclub-card";
+  name: string;
+  phone: string;
+  telegramUsername: string;
+  cardType: string;
+  plan: string;
+  price: string;
+  source: string;
+};
+
+export type LeadPayload = TourLeadPayload | ContactLeadPayload | BayClubLeadPayload;
 
 export async function sendLead(payload: LeadPayload) {
   const response = await fetch("/api/telegram", {

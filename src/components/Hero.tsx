@@ -1,4 +1,17 @@
-import { ArrowRight, Camera, Car, Compass, Globe2, Hotel, Luggage, Map, Mountain, Palmtree, Plane, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Camera,
+  Car,
+  Compass,
+  Globe2,
+  Hotel,
+  Luggage,
+  Map,
+  Mountain,
+  Palmtree,
+  Plane,
+  ShieldCheck,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Bubble, RainbowArc, Wave } from "./Brand";
 
