@@ -5,6 +5,7 @@ import { BayMark } from "./Brand";
 
 const LINKS = [
   { id: "turlar", label: "Turlar" },
+  { id: "ichki-turizm", label: "Ichki turizm" },
   { id: "haqimizda", label: "Biz haqimizda" },
   { id: "fikrlar", label: "Mijozlar" },
   { id: "savollar", label: "Savollar" },
@@ -24,7 +25,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    const ids = ["home", "turlar", "haqimizda", "fikrlar", "savollar", "aloqa"];
+    const ids = ["home", "turlar", "ichki-turizm", "haqimizda", "fikrlar", "savollar", "aloqa"];
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setActive(e.target.id)),
       { rootMargin: "-40% 0px -55% 0px" }

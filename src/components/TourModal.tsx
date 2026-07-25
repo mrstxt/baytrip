@@ -11,12 +11,12 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { formatPrice, type Tour } from "../data";
+import { formatPrice, type TourBase } from "../data";
 import { useApp } from "../store";
 import { cn } from "../utils/cn";
 import { Stars } from "./ui";
 
-export default function TourModal({ tour, onClose }: { tour: Tour; onClose: () => void }) {
+export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: () => void }) {
   const { toast } = useApp();
   const [date, setDate] = useState(tour.nextDates[0]);
   const [people, setPeople] = useState(2);
@@ -132,7 +132,7 @@ export default function TourModal({ tour, onClose }: { tour: Tour; onClose: () =
                 <div className="flex items-end justify-between">
                   <div>
                     <p className="text-xs font-semibold text-slate-400">Narx, kishiboshiga</p>
-                    <p className="font-display text-3xl font-extrabold text-brand-600">{formatPrice(tour.price)}</p>
+                    <p className="font-display text-3xl font-extrabold text-brand-600">{formatPrice(tour.price, tour.currency)}</p>
                   </div>
                   <span className="rounded-full bg-tangerine/10 px-3 py-1.5 text-xs font-extrabold text-tangerine">
                     {tour.seatsLeft} ta joy qoldi
@@ -191,7 +191,7 @@ export default function TourModal({ tour, onClose }: { tour: Tour; onClose: () =
 
                 <div className="mt-3 flex justify-between rounded-xl bg-brand-50 px-4 py-3 text-sm font-bold text-brand-800">
                   <span>Jami (taxminan)</span>
-                  <span className="font-display">{formatPrice(tour.price * people)}</span>
+                  <span className="font-display">{formatPrice(tour.price * people, tour.currency)}</span>
                 </div>
 
                 <label className="mt-4 block">

@@ -8,13 +8,13 @@ export const CATEGORIES: { id: Category; label: string }[] = [
   { id: "lyuks", label: "Lyuks turlar" },
 ];
 
-export type Tour = {
+/** Ikkala (xalqaro/ichki) tur turi uchun umumiy shakl — TourModal shu asosda ishlaydi */
+export type TourBase = {
   id: string;
   title: string;
   city: string;
   country: string;
   flag: string;
-  category: Exclude<Category, "all">;
   days: number;
   nights: number;
   price: number;
@@ -27,7 +27,10 @@ export type Tour = {
   seatsLeft: number;
   includes: string[];
   itinerary: { day: string; text: string }[];
+  currency?: "usd" | "som";
 };
+
+export type Tour = TourBase & { category: Exclude<Category, "all"> };
 
 export const TOURS: Tour[] = [
   {
@@ -245,8 +248,227 @@ export const TOURS: Tour[] = [
   },
 ];
 
-export const formatPrice = (n: number) =>
-  n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " $";
+export const formatPrice = (n: number, currency: "usd" | "som" = "usd") =>
+  n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (currency === "som" ? " so'm" : " $");
+
+/* =========================================================================
+   ICHKI TURIZM — O'zbekiston va Markaziy Osiyo bo'ylab tur paketlari
+   (Instagram: @baytrip.uz)
+   ========================================================================= */
+
+export type DomesticCategory = "all" | "tarixiy" | "tabiat" | "qoshni";
+
+export const DOMESTIC_CATEGORIES: { id: DomesticCategory; label: string }[] = [
+  { id: "all", label: "Barchasi" },
+  { id: "tarixiy", label: "Tarixiy shaharlar" },
+  { id: "tabiat", label: "Tog' va tabiat" },
+  { id: "qoshni", label: "Qo'shni davlatlar" },
+];
+
+export type DomesticTour = TourBase & { category: Exclude<DomesticCategory, "all"> };
+
+export const DOMESTIC_TOURS: DomesticTour[] = [
+  {
+    id: "samarqand",
+    title: "Samarqand — Registon sirlari",
+    city: "Samarqand",
+    country: "O'zbekiston",
+    flag: "🇺🇿",
+    category: "tarixiy",
+    days: 2,
+    nights: 1,
+    price: 690000,
+    oldPrice: 850000,
+    rating: 4.9,
+    reviews: 412,
+    image:
+      "https://images.pexels.com/photos/16386337/pexels-photo-16386337.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    tag: "Eng ommabop",
+    currency: "som",
+    nextDates: ["Har shanba", "Har yakshanba"],
+    seatsLeft: 9,
+    includes: ["Yo'l-yo'lakay transport", "Mehmonxona", "Nonushta", "Gid xizmati", "Kirish chiptalari"],
+    itinerary: [
+      { day: "1-kun", text: "Toshkentdan yo'lga chiqish, Registon maydoni, Sherdor va Tillakori madrasalari." },
+      { day: "1-kun, kechqurun", text: "Sioh bozor va milliy taomlar bilan tanishuv, mehmonxonaga joylashish." },
+      { day: "2-kun", text: "Gur-Amir maqbarasi, Bibixonim masjidi, Shohi Zinda ansambli va Toshkentga qaytish." },
+    ],
+  },
+  {
+    id: "buxoro",
+    title: "Buxoro — Ipak yo'li marvaridi",
+    city: "Buxoro",
+    country: "O'zbekiston",
+    flag: "🇺🇿",
+    category: "tarixiy",
+    days: 3,
+    nights: 2,
+    price: 990000,
+    rating: 4.8,
+    reviews: 287,
+    image:
+      "https://images.pexels.com/photos/36771067/pexels-photo-36771067.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    currency: "som",
+    nextDates: ["Har juma", "Har chorshanba"],
+    seatsLeft: 11,
+    includes: ["Poyezd chiptasi (Afrosiyob)", "Mehmonxona", "Nonushta", "Gid xizmati", "Kirish chiptalari"],
+    itinerary: [
+      { day: "1-kun", text: "Afrosiyob tezyurar poyezdida Buxoroga yetib borish, Lyabi Xovuz majmuasi." },
+      { day: "2-kun", text: "Ark qal'asi, Kalon minorasi va masjidi, Toqi Zargaron savdo gumbazlari." },
+      { day: "3-kun", text: "Sitorai Mohi Xosa saroyi, milliy hunarmandchilik ustaxonalari va qaytish." },
+    ],
+  },
+  {
+    id: "xiva",
+    title: "Xiva — Ichan Qal'a ertagi",
+    city: "Xiva",
+    country: "O'zbekiston",
+    flag: "🇺🇿",
+    category: "tarixiy",
+    days: 3,
+    nights: 2,
+    price: 1090000,
+    oldPrice: 1290000,
+    rating: 4.9,
+    reviews: 198,
+    image:
+      "https://images.pexels.com/photos/19473670/pexels-photo-19473670.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    tag: "Chegirma",
+    currency: "som",
+    nextDates: ["Har oyning 5-kuni", "Har oyning 20-kuni"],
+    seatsLeft: 6,
+    includes: ["Aviachipta (Toshkent–Urganch)", "Mehmonxona", "Nonushta", "Gid xizmati", "Kirish chiptalari"],
+    itinerary: [
+      { day: "1-kun", text: "Urganchga parvoz, Xivaga transfer, Ichan Qal'a devorlari bo'ylab kechki sayr." },
+      { day: "2-kun", text: "Kalta Minor, Muhammad Amin Xon madrasasi, Tosh Hovli saroyi." },
+      { day: "3-kun", text: "Islom Xo'ja minorasi, milliy bozor va Toshkentga qaytish parvozi." },
+    ],
+  },
+  {
+    id: "chimyon-chorvoq",
+    title: "Chimyon va Chorvoq — tog' dam olishi",
+    city: "Bo'stonliq",
+    country: "O'zbekiston",
+    flag: "🇺🇿",
+    category: "tabiat",
+    days: 2,
+    nights: 1,
+    price: 590000,
+    rating: 4.7,
+    reviews: 234,
+    image:
+      "https://images.pexels.com/photos/18057178/pexels-photo-18057178.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    currency: "som",
+    nextDates: ["Har hafta oxiri"],
+    seatsLeft: 14,
+    includes: ["Transport", "Tog' uyi (kottedj)", "3 mahal ovqat", "Kanotaj/kanatnaya yo'l", "Gid xizmati"],
+    itinerary: [
+      { day: "1-kun", text: "Toshkentdan yo'lga chiqish, Chorvoq suv ombori bo'ylab qayiqda sayr." },
+      { day: "1-kun, kechqurun", text: "Tog' etagida barbekyu kechasi va tabiatda tunash." },
+      { day: "2-kun", text: "Chimyon kanat yo'lida tog' manzarasi, piknik va Toshkentga qaytish." },
+    ],
+  },
+  {
+    id: "fargona",
+    title: "Farg'ona vodiysi — hunarmandchilik sayohati",
+    city: "Marg'ilon",
+    country: "O'zbekiston",
+    flag: "🇺🇿",
+    category: "tabiat",
+    days: 2,
+    nights: 1,
+    price: 650000,
+    rating: 4.7,
+    reviews: 156,
+    image:
+      "https://images.pexels.com/photos/30722459/pexels-photo-30722459.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    currency: "som",
+    nextDates: ["Har oyning 10-kuni", "Har oyning 25-kuni"],
+    seatsLeft: 10,
+    includes: ["Transport", "Mehmonxona", "Nonushta", "Yodgorlik ustaxona tashrifi", "Gid xizmati"],
+    itinerary: [
+      { day: "1-kun", text: "Qo'qon xon o'rdasiga tashrif, Marg'ilonga yo'l, Yodgorlik ipakchilik fabrikasi." },
+      { day: "2-kun", text: "Rishton kulolchilik ustaxonalari, milliy bozor va Toshkentga qaytish." },
+    ],
+  },
+  {
+    id: "issiqkol",
+    title: "Issiqko'l — Markaziy Osiyo marvaridi",
+    city: "Cholpon-Ota",
+    country: "Qirg'iziston",
+    flag: "🇰🇬",
+    category: "qoshni",
+    days: 5,
+    nights: 4,
+    price: 2450000,
+    rating: 4.8,
+    reviews: 176,
+    image:
+      "https://images.pexels.com/photos/33674534/pexels-photo-33674534.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    tag: "Yozgi mavsum",
+    currency: "som",
+    nextDates: ["Iyun–avgust, har hafta"],
+    seatsLeft: 8,
+    includes: ["Avtobusda yo'l", "Sohil bo'yi mehmonxonasi", "3 mahal ovqat", "Ekskursiyalar", "Gid xizmati"],
+    itinerary: [
+      { day: "1-kun", text: "Toshkentdan Bishkekka yo'l, ko'l qirg'og'idagi mehmonxonaga joylashish." },
+      { day: "2–3 kun", text: "Ko'lda dam olish, Barskoon vodiysi va sharsharalar, konnoy sayohat." },
+      { day: "4-kun", text: "Jeti-Ogyuz qizil qoyalari va milliy yurtada choy marosimi." },
+      { day: "5-kun", text: "Bishkek shahar aylanish va Toshkentga qaytish." },
+    ],
+  },
+  {
+    id: "almati",
+    title: "Almati — Tyan-Shan tog'lari bag'rida",
+    city: "Almati",
+    country: "Qozog'iston",
+    flag: "🇰🇿",
+    category: "qoshni",
+    days: 4,
+    nights: 3,
+    price: 2100000,
+    rating: 4.7,
+    reviews: 143,
+    image:
+      "https://images.pexels.com/photos/24974885/pexels-photo-24974885.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    currency: "som",
+    nextDates: ["Har oyning 8-kuni", "Har oyning 22-kuni"],
+    seatsLeft: 12,
+    includes: ["Aviachipta", "4★ mehmonxona", "Nonushta", "Shymbulak kanat yo'li", "Gid xizmati"],
+    itinerary: [
+      { day: "1-kun", text: "Toshkentdan parvoz, Panfilov bog'i va Zenkov soboriga tashrif." },
+      { day: "2-kun", text: "Shymbulak tog' kurortiga sayohat, kanat yo'lida tog' manzarasi." },
+      { day: "3-kun", text: "Katta Almati ko'li va Medeu muz maydonchasi." },
+      { day: "4-kun", text: "Erkin vaqt, savdo markazlari va Toshkentga qaytish." },
+    ],
+  },
+  {
+    id: "dushanbe",
+    title: "Dushanbe va Fon tog'lari — yangi kashfiyot",
+    city: "Dushanbe",
+    country: "Tojikiston",
+    flag: "🇹🇯",
+    category: "qoshni",
+    days: 5,
+    nights: 4,
+    price: 2650000,
+    rating: 4.6,
+    reviews: 98,
+    image:
+      "https://images.pexels.com/photos/18251297/pexels-photo-18251297.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=627&w=1200",
+    tag: "Yangi yo'nalish",
+    currency: "som",
+    nextDates: ["Iyul–sentyabr, oyiga 2 marta"],
+    seatsLeft: 7,
+    includes: ["Avtobusda yo'l", "Mehmonxona", "3 mahal ovqat", "Fon ko'llari ekskursiyasi", "Gid xizmati"],
+    itinerary: [
+      { day: "1-kun", text: "Dushanbega yo'l, Rudaki prospekti va Ismoil Somoniy yodgorligi." },
+      { day: "2–3 kun", text: "Fon tog'lari — Iskandarko'l va Kulikalon ko'llari bo'ylab trekking." },
+      { day: "4-kun", text: "Hisor qal'asi va milliy bozor bilan tanishuv." },
+      { day: "5-kun", text: "Toshkentga qaytish." },
+    ],
+  },
+];
 
 export const TESTIMONIALS = [
   {
