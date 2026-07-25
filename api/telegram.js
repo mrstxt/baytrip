@@ -16,11 +16,30 @@ function clean(value, fallback = "-") {
   return text || fallback;
 }
 
+function normalizeTelegramUsername(value) {
+  return clean(value, "").replace(/^@+/, "");
+}
+
+function getAdminProfileConfig() {
+  const apiId = Number(process.env.TELEGRAM_API_ID);
+  const apiHash = clean(process.env.TELEGRAM_API_HASH, "");
+  const session = clean(process.env.TELEGRAM_ADMIN_SESSION, "");
+
+  if (!Number.isFinite(apiId) || !apiHash || !session) {
+    return null;
+  }
+
+  return { apiId, apiHash, session };
+}
+
 function validateLead(body) {
   if (!body || typeof body !== "object") return "So'rov formati noto'g'ri.";
   if (!Object.prototype.hasOwnProperty.call(LEAD_LABELS, body.type)) return "So'rov turi noto'g'ri.";
   if (clean(body.name, "").length < 3) return "Ism to'liq emas.";
   if (!/^\+?[\d\s()-]{9,}$/.test(clean(body.phone, ""))) return "Telefon raqam noto'g'ri.";
+  if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizeTelegramUsername(body.telegramUsername))) {
+    return "Telegram username noto'g'ri.";
+  }
 
   if (body.type !== "contact") {
     const required = ["tourTitle", "tourCity", "tourCountry", "date", "people", "price", "total"];
@@ -44,9 +63,69 @@ function getTopicId(type) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function buildMessage(body) {
+function buildClientGreeting(body) {
+  const name = clean(body.name).split(/\s+/)[0];
+
+  if (body.type === "contact") {
+    const request = clean(body.message, "murojaatingiz");
+    return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. Sayt orqali "${request}" bo'yicha murojaat qilgan ekansiz. Sizga yordam berish uchun yozdim.`;
+  }
+
+  const tourTitle = clean(body.tourTitle);
+  const destination = `${clean(body.tourCity)}, ${clean(body.tourCountry)}`;
+  return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. "${tourTitle}" (${destination}) tur paketi bo'yicha murojaat qilgan ekansiz. Sizga batafsil ma'lumot berish uchun yozdim.`;
+}
+
+function buildProfileDeliveryText(delivery) {
+  if (!delivery?.enabled) {
+    return "Admin profil seansi sozlanmagan. TELEGRAM_API_ID, TELEGRAM_API_HASH va TELEGRAM_ADMIN_SESSION kiriting.";
+  }
+
+  if (delivery.sent) {
+    return `Admin profilidan mijozga 1-xabar yuborildi.`;
+  }
+
+  return `Admin profilidan yuborilmadi: ${clean(delivery.error, "noma'lum xatolik")}`;
+}
+
+async function sendAdminProfileMessage(body, message) {
+  const config = getAdminProfileConfig();
+  if (!config) return { enabled: false, sent: false };
+
+  const username = `@${normalizeTelegramUsername(body.telegramUsername)}`;
+  let client;
+
+  try {
+    const [{ TelegramClient }, { StringSession }] = await Promise.all([
+      import("telegram"),
+      import("telegram/sessions/index.js"),
+    ]);
+
+    client = new TelegramClient(new StringSession(config.session), config.apiId, config.apiHash, {
+      connectionRetries: 2,
+    });
+
+    await client.connect();
+    await client.sendMessage(username, { message });
+    return { enabled: true, sent: true };
+  } catch (error) {
+    return {
+      enabled: true,
+      sent: false,
+      error: error instanceof Error ? error.message : "Telegram profil seansi bilan aloqa uzildi.",
+    };
+  } finally {
+    if (client) {
+      await client.disconnect().catch(() => {});
+    }
+  }
+}
+
+function buildMessage(body, profileDelivery) {
   const label = LEAD_LABELS[body.type];
   const source = clean(body.source, "Sayt");
+  const telegramUsername = `@${normalizeTelegramUsername(body.telegramUsername)}`;
+  const clientGreeting = buildClientGreeting(body);
   const createdAt = new Intl.DateTimeFormat("uz-UZ", {
     timeZone: "Asia/Tashkent",
     dateStyle: "medium",
@@ -58,6 +137,7 @@ function buildMessage(body) {
     "",
     `👤 <b>Mijoz:</b> ${escapeHtml(clean(body.name))}`,
     `📞 <b>Telefon:</b> ${escapeHtml(clean(body.phone))}`,
+    `💬 <b>Telegram:</b> ${escapeHtml(telegramUsername)}`,
   ];
 
   if (body.type === "contact") {
@@ -74,7 +154,16 @@ function buildMessage(body) {
     );
   }
 
-  lines.push("", `🔎 <b>Manba:</b> ${escapeHtml(source)}`, `🕒 <b>Vaqt:</b> ${escapeHtml(createdAt)}`);
+  lines.push(
+    "",
+    `🤖 <b>Bot/profil uchun 1-xabar:</b>`,
+    escapeHtml(clientGreeting),
+    "",
+    `📨 <b>Profil xabari statusi:</b> ${escapeHtml(buildProfileDeliveryText(profileDelivery))}`,
+    "",
+    `🔎 <b>Manba:</b> ${escapeHtml(source)}`,
+    `🕒 <b>Vaqt:</b> ${escapeHtml(createdAt)}`
+  );
 
   return lines.join("\n");
 }
@@ -106,9 +195,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error });
   }
 
+  const clientGreeting = buildClientGreeting(body);
+  const profileDelivery = await sendAdminProfileMessage(body, clientGreeting);
+
   const payload = {
     chat_id: chatId,
-    text: buildMessage(body),
+    text: buildMessage(body, profileDelivery),
     parse_mode: "HTML",
     disable_web_page_preview: true,
   };
@@ -131,7 +223,7 @@ export default async function handler(req, res) {
       return res.status(502).json({ ok: false, error: description });
     }
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, profileMessageSent: profileDelivery.sent });
   } catch {
     return res.status(502).json({ ok: false, error: "Telegram bilan aloqa uzildi." });
   }

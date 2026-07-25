@@ -12,7 +12,19 @@ Yo'naltirish tartibi:
 - Ichki tur paketlari va qo'shni davlat turlari: `TELEGRAM_DOMESTIC_TOPIC_ID`
 - Boshqa murojaatlar: `TELEGRAM_CONTACT_TOPIC_ID`
 
-Telegram xabarida mijoz ismi, telefon raqami, tur nomi, yo'nalish, sana, sayohatchilar soni, narx va manba ko'rsatiladi.
+Telegram xabarida mijoz ismi, telefon raqami, Telegram username, tur nomi, yo'nalish, sana, sayohatchilar soni, narx, manba va admin profilidan yuboriladigan 1-xabar statusi ko'rsatiladi.
+
+## Admin profilidan 1-xabar yuborish
+
+Mijozga birinchi xabar bot nomidan emas, admin Telegram profili nomidan ketishi uchun MTProto user session kerak bo'ladi. Buning uchun quyidagi env varlar sozlanadi:
+
+```env
+TELEGRAM_API_ID=123456
+TELEGRAM_API_HASH=abcdef123456...
+TELEGRAM_ADMIN_SESSION=1AQA...
+```
+
+`TELEGRAM_ADMIN_SESSION` admin profilining session stringi bo'ladi. Bu maxfiy qiymat: uni repo ichiga yozmang, faqat Vercel env vars ichida saqlang. Agar bu uchta env var kiritilmasa, ariza baribir guruhga tushadi, lekin mijozga admin profilidan avtomatik xabar yuborilmaydi.
 
 ## Telegram bot sozlash
 
@@ -45,6 +57,9 @@ TELEGRAM_CHAT_ID=-1001234567890
 TELEGRAM_EXTERNAL_TOPIC_ID=2
 TELEGRAM_DOMESTIC_TOPIC_ID=3
 TELEGRAM_CONTACT_TOPIC_ID=4
+TELEGRAM_API_ID=123456
+TELEGRAM_API_HASH=abcdef123456...
+TELEGRAM_ADMIN_SESSION=1AQA...
 ```
 
 Env varlarni qo'shgandan keyin loyihani qayta deploy qiling.

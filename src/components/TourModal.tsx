@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  AtSign,
   CalendarDays,
   Check,
   Clock,
@@ -33,6 +34,7 @@ export default function TourModal({
   const [people, setPeople] = useState(2);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [err, setErr] = useState("");
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
@@ -52,6 +54,10 @@ export default function TourModal({
     if (sending) return;
     if (name.trim().length < 3) return setErr("Ismingizni to'liq kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
+    const normalizedTelegram = telegramUsername.trim().replace(/^@+/, "");
+    if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizedTelegram)) {
+      return setErr("Telegram username'ni to'g'ri kiriting. Masalan: baytrip_user");
+    }
     setErr("");
     const code = `BT-${Math.floor(1000 + Math.random() * 9000)}`;
     setSending(true);
@@ -61,6 +67,7 @@ export default function TourModal({
         type: requestType,
         name,
         phone,
+        telegramUsername: `@${normalizedTelegram}`,
         tourTitle: tour.title,
         tourCity: tour.city,
         tourCountry: tour.country,
@@ -154,7 +161,7 @@ export default function TourModal({
                 </span>
                 <h4 className="mt-5 font-display text-xl font-extrabold text-ink">Ariza yuborildi!</h4>
                 <p className="mt-2 max-w-xs text-sm text-ink-soft">
-                  Menejerimiz 15 daqiqa ichida {phone} raqamiga qo'ng'iroq qiladi va bronni tasdiqlaydi.
+                  Menejerimiz 15 daqiqa ichida {phone} raqami yoki @{telegramUsername.trim().replace(/^@+/, "")} orqali bog'lanadi.
                 </p>
                 <button
                   onClick={onClose}
@@ -248,6 +255,20 @@ export default function TourModal({
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+998 95 748 59 95"
                       inputMode="tel"
+                      className="w-full bg-transparent text-sm font-semibold outline-none"
+                    />
+                  </span>
+                </label>
+                <label className="mt-3 block">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Telegram username</span>
+                  <span className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                    <AtSign className="h-4 w-4 text-brand-600" />
+                    <input
+                      value={telegramUsername}
+                      onChange={(e) => setTelegramUsername(e.target.value)}
+                      placeholder="baytrip_user"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       className="w-full bg-transparent text-sm font-semibold outline-none"
                     />
                   </span>

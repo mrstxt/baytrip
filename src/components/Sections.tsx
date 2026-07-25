@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  AtSign,
   BadgeCheck,
   CheckCircle2,
   ChevronDown,
@@ -217,6 +218,7 @@ export function Contact() {
   const { toast } = useApp();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
@@ -227,6 +229,10 @@ export function Contact() {
     if (sending) return;
     if (name.trim().length < 3) return setErr("Ismingizni kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
+    const normalizedTelegram = telegramUsername.trim().replace(/^@+/, "");
+    if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizedTelegram)) {
+      return setErr("Telegram username'ni to'g'ri kiriting. Masalan: baytrip_user");
+    }
     setErr("");
     setSending(true);
 
@@ -235,6 +241,7 @@ export function Contact() {
         type: "contact",
         name,
         phone,
+        telegramUsername: `@${normalizedTelegram}`,
         message: msg,
         source: "Aloqa formasi",
       });
@@ -335,6 +342,20 @@ export function Contact() {
                     inputMode="tel"
                     className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                   />
+                </label>
+                <label className="mt-3 block">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Telegram username</span>
+                  <span className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                    <AtSign className="h-4 w-4 text-brand-600" />
+                    <input
+                      value={telegramUsername}
+                      onChange={(e) => setTelegramUsername(e.target.value)}
+                      placeholder="baytrip_user"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      className="w-full bg-transparent text-sm font-semibold outline-none"
+                    />
+                  </span>
                 </label>
                 <label className="mt-3 block">
                   <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Qaysi tur qiziqtiradi? (ixtiyoriy)</span>
