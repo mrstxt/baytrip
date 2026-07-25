@@ -158,25 +158,24 @@ function BayClubPlasticCard({
           {design.type}
         </span>
 
-        <div className="relative flex h-full flex-col justify-between">
-          <div className="h-10" />
+        <div className="absolute left-5 top-[76px] z-10 sm:top-[82px]">
+          <CardChip color={design.chip} />
+        </div>
 
-          <div>
-            <CardChip color={design.chip} />
-            <p className="mt-3 whitespace-nowrap font-display text-[clamp(16px,5.4vw,20px)] font-extrabold tracking-[0.06em] text-white drop-shadow-sm sm:mt-4 sm:tracking-[0.1em]">
-              {design.number}
+        <p className="absolute left-5 right-5 top-[126px] z-10 whitespace-nowrap font-display text-[clamp(15px,4.9vw,19px)] font-extrabold tracking-[0.055em] text-white drop-shadow-sm sm:top-[134px] sm:tracking-[0.085em]">
+          {design.number}
+        </p>
+
+        <div className="absolute bottom-5 left-5 right-5 z-10 flex items-end justify-between gap-3 sm:bottom-6">
+          <div className="min-w-0 pr-2">
+            <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-white/65 sm:text-[9px]">Card holder</p>
+            <p className="mt-1 truncate text-[10px] font-extrabold uppercase tracking-[0.08em] sm:text-[12px] sm:tracking-[0.12em]">
+              {design.holder}
             </p>
           </div>
-
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/65">Card holder</p>
-              <p className="mt-1 truncate text-[11px] font-extrabold uppercase tracking-[0.08em] sm:text-[12px] sm:tracking-[0.12em]">{design.holder}</p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-white/80">Discount</p>
-              <p className="font-display text-4xl font-extrabold leading-none text-white">20%</p>
-            </div>
+          <div className="shrink-0 text-right">
+            <p className="text-[8px] font-extrabold uppercase tracking-[0.12em] text-white/80 sm:text-[9px] sm:tracking-[0.14em]">Discount</p>
+            <p className="font-display text-[30px] font-extrabold leading-none text-white sm:text-[34px]">20%</p>
           </div>
         </div>
       </div>
