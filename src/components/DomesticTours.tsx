@@ -2,34 +2,13 @@ import { useMemo, useState } from "react";
 import { Clock, Compass, MapPin, Sparkles, Star } from "lucide-react";
 import { DOMESTIC_CATEGORIES, DOMESTIC_TOURS, formatPrice, type DomesticTour } from "../data";
 import { cn } from "../utils/cn";
-import { getUpcomingTourDates } from "../utils/tourDates";
+import { getTodayInputValue, getUpcomingTourDates } from "../utils/tourDates";
 import { BrandPattern } from "./Brand";
 import Reveal from "./Reveal";
+import TourDateSelector from "./TourDateSelector";
 import TourModal from "./TourModal";
 
 const isFeatured = (t: DomesticTour) => !!t.tag || !!t.oldPrice;
-
-function UpcomingDates({ tourId, onSelect }: { tourId: string; onSelect?: (date: string) => void }) {
-  const dates = getUpcomingTourDates(tourId, 3);
-
-  return (
-    <div className="mt-3">
-      <p className="text-[10px] font-extrabold uppercase tracking-widest text-ink-soft">Yaqin sanalar</p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {dates.map((date) => (
-          <button
-            key={date.inputValue}
-            type="button"
-            onClick={() => onSelect?.(date.inputValue)}
-            className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-bold text-ink-soft ring-1 ring-black/[0.04] transition hover:-translate-y-0.5 hover:ring-emerald-300"
-          >
-            {date.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 const InstagramIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
@@ -41,11 +20,22 @@ export default function DomesticTours() {
   const [category, setCategory] = useState<(typeof DOMESTIC_CATEGORIES)[number]["id"]>("all");
   const [selected, setSelected] = useState<DomesticTour | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [cardDates, setCardDates] = useState<Record<string, string>>({});
 
   const filtered = useMemo(
     () => (category === "all" ? DOMESTIC_TOURS : DOMESTIC_TOURS.filter((t) => t.category === category)),
     [category]
   );
+  const getCardDate = (tourId: string) =>
+    cardDates[tourId] ?? getUpcomingTourDates(tourId, 1)[0]?.inputValue ?? getTodayInputValue();
+  const updateCardDate = (tourId: string, date: string) => {
+    if (!date) return;
+    setCardDates((current) => ({ ...current, [tourId]: date }));
+  };
+  const openTour = (tour: DomesticTour) => {
+    setSelectedDate(getCardDate(tour.id));
+    setSelected(tour);
+  };
 
   return (
     <section id="ichki-turizm" className="relative scroll-mt-24 overflow-hidden bg-surface py-20 sm:py-28">
@@ -105,10 +95,7 @@ export default function DomesticTours() {
                 )}
 
                 <button
-                  onClick={() => {
-                    setSelectedDate(undefined);
-                    setSelected(t);
-                  }}
+                  onClick={() => openTour(t)}
                   className="relative block h-56 overflow-hidden text-left"
                 >
                   <img
@@ -155,12 +142,11 @@ export default function DomesticTours() {
                       <span className="font-semibold text-slate-400">({t.reviews})</span>
                     </span>
                   </div>
-                  <UpcomingDates
+                  <TourDateSelector
                     tourId={t.id}
-                    onSelect={(date) => {
-                      setSelectedDate(date);
-                      setSelected(t);
-                    }}
+                    value={getCardDate(t.id)}
+                    onChange={(date) => updateCardDate(t.id, date)}
+                    tone="emerald"
                   />
 
                   <div className="mt-auto pt-5">
@@ -177,10 +163,7 @@ export default function DomesticTours() {
                         </p>
                       </div>
                       <button
-                        onClick={() => {
-                          setSelectedDate(undefined);
-                          setSelected(t);
-                        }}
+                        onClick={() => openTour(t)}
                         className="rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 px-5 py-2.5 text-[13px] font-extrabold text-white shadow-md shadow-emerald-600/30 transition-all hover:shadow-lg hover:shadow-emerald-600/40 hover:brightness-110 active:scale-95"
                       >
                         Batafsil

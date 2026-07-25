@@ -10,55 +10,13 @@ import {
 import { CATEGORIES, TOURS, formatPrice, type Tour } from "../data";
 import { useApp } from "../store";
 import { cn } from "../utils/cn";
-import { getUpcomingTourDates } from "../utils/tourDates";
+import { getTodayInputValue, getUpcomingTourDates } from "../utils/tourDates";
 import Reveal from "./Reveal";
+import TourDateSelector from "./TourDateSelector";
 import TourModal from "./TourModal";
 import { BrandPattern } from "./Brand";
 
 const isHot = (t: Tour) => !!t.oldPrice || t.seatsLeft <= 5 || !!t.tag;
-
-function UpcomingDates({
-  tourId,
-  variant = "light",
-  onSelect,
-}: {
-  tourId: string;
-  variant?: "light" | "dark";
-  onSelect?: (date: string) => void;
-}) {
-  const dates = getUpcomingTourDates(tourId, 3);
-  const dark = variant === "dark";
-
-  return (
-    <div className="mt-3">
-      <p className={cn("text-[10px] font-extrabold uppercase tracking-widest", dark ? "text-white/55" : "text-ink-soft")}>
-        Yaqin sanalar
-      </p>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {dates.map((date) => {
-          const Component = onSelect ? "button" : "span";
-
-          return (
-          <Component
-            key={date.inputValue}
-            type={onSelect ? "button" : undefined}
-            onClick={onSelect ? () => onSelect(date.inputValue) : undefined}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[11px] font-bold ring-1",
-              onSelect && "transition hover:-translate-y-0.5 hover:ring-brand-300",
-              dark
-                ? "bg-white/12 text-white/90 ring-white/15 backdrop-blur-md"
-                : "bg-surface text-ink-soft ring-black/[0.04]"
-            )}
-          >
-            {date.label}
-          </Component>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function HotPill({ seats }: { seats?: number }) {
   return (
@@ -74,6 +32,7 @@ export default function Tours() {
   const { category, setCategory } = useApp();
   const [selected, setSelected] = useState<Tour | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
+  const [cardDates, setCardDates] = useState<Record<string, string>>({});
   const scroller = useRef<HTMLDivElement>(null);
 
   const hot = useMemo(() => TOURS.filter(isHot).sort((a, b) => b.reviews - a.reviews), []);
@@ -84,6 +43,16 @@ export default function Tours() {
 
   const scrollBy = (dir: number) =>
     scroller.current?.scrollBy({ left: dir * 380, behavior: "smooth" });
+  const getCardDate = (tourId: string) =>
+    cardDates[tourId] ?? getUpcomingTourDates(tourId, 1)[0]?.inputValue ?? getTodayInputValue();
+  const updateCardDate = (tourId: string, date: string) => {
+    if (!date) return;
+    setCardDates((current) => ({ ...current, [tourId]: date }));
+  };
+  const openTour = (tour: Tour) => {
+    setSelectedDate(getCardDate(tour.id));
+    setSelected(tour);
+  };
 
   return (
     <section id="turlar" className="relative scroll-mt-24 overflow-hidden bg-white pb-24 pt-16 sm:pb-28">
@@ -128,12 +97,8 @@ export default function Tours() {
       >
         {hot.map((t, i) => (
           <Reveal key={t.id} delay={i * 70} className="w-[300px] shrink-0 snap-start sm:w-[350px]">
-            <button
-              onClick={() => {
-                setSelectedDate(undefined);
-                setSelected(t);
-              }}
-              className="group relative block h-[460px] w-full overflow-hidden rounded-[30px] text-left shadow-xl shadow-brand-950/15 ring-1 ring-black/10 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-brand-950/30"
+            <article
+              className="group relative block h-[560px] w-full overflow-hidden rounded-[30px] text-left shadow-xl shadow-brand-950/15 ring-1 ring-black/10 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-brand-950/30"
             >
               <img
                 src={t.image}
@@ -180,7 +145,12 @@ export default function Tours() {
                     {t.seatsLeft} joy qoldi
                   </span>
                 </div>
-                <UpcomingDates tourId={t.id} variant="dark" />
+                <TourDateSelector
+                  tourId={t.id}
+                  value={getCardDate(t.id)}
+                  onChange={(date) => updateCardDate(t.id, date)}
+                  dark
+                />
                 <div className="mt-4 flex items-end justify-between border-t border-white/15 pt-4">
                   <div>
                     {t.oldPrice && (
@@ -191,12 +161,16 @@ export default function Tours() {
                       {formatPrice(t.price)}
                     </p>
                   </div>
-                  <span className="rounded-full bg-sun px-4 py-2.5 text-xs font-extrabold text-ink shadow-lg shadow-black/25 transition-all group-hover:bg-amber-300">
+                  <button
+                    type="button"
+                    onClick={() => openTour(t)}
+                    className="rounded-full bg-sun px-4 py-2.5 text-xs font-extrabold text-ink shadow-lg shadow-black/25 transition-all hover:bg-amber-300 active:scale-95"
+                  >
                     Batafsil →
-                  </span>
+                  </button>
                 </div>
               </div>
-            </button>
+            </article>
           </Reveal>
         ))}
       </div>
@@ -241,10 +215,7 @@ export default function Tours() {
                 )}
 
                 <button
-                  onClick={() => {
-                    setSelectedDate(undefined);
-                    setSelected(t);
-                  }}
+                  onClick={() => openTour(t)}
                   className="relative block h-56 overflow-hidden text-left"
                 >
                   <img
@@ -288,12 +259,10 @@ export default function Tours() {
                       <span className="font-semibold text-slate-400">({t.reviews})</span>
                     </span>
                   </div>
-                  <UpcomingDates
+                  <TourDateSelector
                     tourId={t.id}
-                    onSelect={(date) => {
-                      setSelectedDate(date);
-                      setSelected(t);
-                    }}
+                    value={getCardDate(t.id)}
+                    onChange={(date) => updateCardDate(t.id, date)}
                   />
 
                   {/* narx — yirik va aniq */}
@@ -309,10 +278,7 @@ export default function Tours() {
                         </p>
                       </div>
                       <button
-                        onClick={() => {
-                          setSelectedDate(undefined);
-                          setSelected(t);
-                        }}
+                        onClick={() => openTour(t)}
                         className="rounded-full bg-gradient-to-br from-brand-500 to-brand-700 px-5 py-2.5 text-[13px] font-extrabold text-white shadow-md shadow-brand-600/30 transition-all hover:shadow-lg hover:shadow-brand-600/40 hover:brightness-110 active:scale-95"
                       >
                         Batafsil
