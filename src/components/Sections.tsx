@@ -21,6 +21,7 @@ import {
   Globe2,
 } from "lucide-react";
 import { FAQS, TESTIMONIALS } from "../data";
+import { sendLead } from "../lib/leads";
 import { useApp } from "../store";
 import { cn } from "../utils/cn";
 import { Bubble } from "./Brand";
@@ -219,14 +220,33 @@ export function Contact() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending) return;
     if (name.trim().length < 3) return setErr("Ismingizni kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
     setErr("");
-    setDone(true);
-    toast("Rahmat! Menejerimiz tez orada bog'lanadi.");
+    setSending(true);
+
+    try {
+      await sendLead({
+        type: "contact",
+        name,
+        phone,
+        message: msg,
+        source: "Aloqa formasi",
+      });
+      setDone(true);
+      toast("Rahmat! Menejerimiz tez orada bog'lanadi.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Murojaatni yuborib bo'lmadi.";
+      setErr(message);
+      toast(message, "error");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -329,9 +349,10 @@ export function Contact() {
                 {err && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">{err}</p>}
                 <button
                   type="submit"
+                  disabled={sending}
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 py-4 text-sm font-extrabold text-white shadow-lg shadow-brand-600/30 transition-all hover:shadow-xl hover:shadow-brand-600/40 hover:brightness-110 active:scale-[0.98]"
                 >
-                  <Send className="h-4 w-4" /> Yuborish
+                  <Send className="h-4 w-4" /> {sending ? "Yuborilmoqda..." : "Yuborish"}
                 </button>
               </form>
             )}

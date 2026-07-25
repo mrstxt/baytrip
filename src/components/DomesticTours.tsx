@@ -157,7 +157,7 @@ export default function DomesticTours() {
         </div>
       </div>
 
-      {selected && <TourModal tour={selected} onClose={() => setSelected(null)} />}
+      {selected && <TourModal tour={selected} requestType="domestic-tour" onClose={() => setSelected(null)} />}
     </section>
   );
 }

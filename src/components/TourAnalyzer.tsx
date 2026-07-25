@@ -414,7 +414,13 @@ export default function TourAnalyzer() {
         )}
       </div>
 
-      {selectedTour && <TourModal tour={selectedTour} onClose={() => setSelectedTour(null)} />}
+      {selectedTour && (
+        <TourModal
+          tour={selectedTour}
+          requestType={answers.region === "xalqaro" ? "external-tour" : "domestic-tour"}
+          onClose={() => setSelectedTour(null)}
+        />
+      )}
     </section>
   );
 }

@@ -12,11 +12,22 @@ import {
   X,
 } from "lucide-react";
 import { formatPrice, type TourBase } from "../data";
+import { sendLead, type LeadType } from "../lib/leads";
 import { useApp } from "../store";
 import { cn } from "../utils/cn";
 import { Stars } from "./ui";
 
-export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: () => void }) {
+type TourRequestType = Extract<LeadType, "external-tour" | "domestic-tour">;
+
+export default function TourModal({
+  tour,
+  onClose,
+  requestType,
+}: {
+  tour: TourBase;
+  onClose: () => void;
+  requestType: TourRequestType;
+}) {
   const { toast } = useApp();
   const [date, setDate] = useState(tour.nextDates[0]);
   const [people, setPeople] = useState(2);
@@ -24,6 +35,7 @@ export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: 
   const [phone, setPhone] = useState("");
   const [err, setErr] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -35,14 +47,38 @@ export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: 
     };
   }, [onClose]);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending) return;
     if (name.trim().length < 3) return setErr("Ismingizni to'liq kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
     setErr("");
-    setSent(true);
     const code = `BT-${Math.floor(1000 + Math.random() * 9000)}`;
-    toast(`Arizangiz qabul qilindi! Bron kodi: ${code}. Tez orada bog'lanamiz.`);
+    setSending(true);
+
+    try {
+      await sendLead({
+        type: requestType,
+        name,
+        phone,
+        tourTitle: tour.title,
+        tourCity: tour.city,
+        tourCountry: tour.country,
+        date,
+        people,
+        price: formatPrice(tour.price, tour.currency),
+        total: formatPrice(tour.price * people, tour.currency),
+        source: requestType === "external-tour" ? "Tashqi tur kartochkasi" : "Ichki tur kartochkasi",
+      });
+      setSent(true);
+      toast(`Arizangiz qabul qilindi! Bron kodi: ${code}. Tez orada bog'lanamiz.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Arizani yuborib bo'lmadi.";
+      setErr(message);
+      toast(message, "error");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -223,10 +259,11 @@ export default function TourModal({ tour, onClose }: { tour: TourBase; onClose: 
 
                 <button
                   type="submit"
+                  disabled={sending}
                   className="mt-5 flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 py-4 text-sm font-extrabold text-white shadow-lg shadow-brand-600/30 transition-all hover:shadow-xl hover:shadow-brand-600/40 hover:brightness-110 active:scale-[0.98]"
                 >
                   <Send className="h-4 w-4" />
-                  Joy band qilish
+                  {sending ? "Yuborilmoqda..." : "Joy band qilish"}
                 </button>
                 <p className="mt-2.5 text-center text-[11px] font-semibold text-slate-400">
                   Hozir to'lov olmaymiz — menejer bog'lanib tasdiqlaydi.

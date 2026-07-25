@@ -267,7 +267,7 @@ export default function Tours() {
         </div>
       </div>
 
-      {selected && <TourModal tour={selected} onClose={() => setSelected(null)} />}
+      {selected && <TourModal tour={selected} requestType="external-tour" onClose={() => setSelected(null)} />}
     </section>
   );
 }
