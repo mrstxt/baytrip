@@ -34,7 +34,9 @@ Aksiyalar obunasi uchun:
 
 - Frontend lead type: `promo-subscribe`
 - Vercel env var: `TELEGRAM_PROMO_TOPIC_ID`
-- Telegram topic tavsiya qilingan nomi: `Aksiyalar obunasi`
+- Telegram topic tavsiya qilingan nomi: `Aksiyalar obunasi` yoki siz ochgan nom bilan `Aksiyasi obunasi`
+- Bot broadcast paroli: `TELEGRAM_BROADCAST_PASSWORD`
+- Ixtiyoriy admin cheklovi: `TELEGRAM_BROADCAST_ADMIN_IDS`
 
 ## Telegram arizalar tizimi
 
@@ -51,6 +53,16 @@ Yo'naltirish tartibi:
 Telegram xabarida mijoz ismi, telefon raqami, Telegram username, ariza turi, tanlangan tur yoki BayClub ma'lumotlari, manba va admin profilidan yuboriladigan 1-xabar statusi ko'rsatiladi.
 
 Footer aksiyalar obunasida foydalanuvchi Telegram username qoldiradi. Telegram bot foydalanuvchiga lichkaga xabar yuborishi uchun foydalanuvchi avval botga `/start` bosgan bo'lishi kerak. Username qoldirish obunachi ro'yxatini yig'ish uchun ishlaydi; ommaviy broadcast qilish uchun alohida subscriber storage va bot broadcast endpoint kerak bo'ladi.
+
+Hozirgi broadcast ishlashi:
+
+- Saytdan username kiritilsa, ariza `Aksiyalar obunasi` topicga tushadi.
+- Admin botga `/start` bosadi va command yo'riqnomasini ko'radi.
+- Admin `/login PAROL` bilan admin panelga kiradi.
+- Panelda `Aksiya xabar yuborish` tugmasi chiqadi.
+- Tugma bosilgandan keyin admin yozgan keyingi matn obunachilarga yuboriladi.
+- Xabarlar bot nomidan emas, `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan lichkaga yuboriladi.
+- Vercel serverless warm instance ichida login holati saqlanadi. Agar serverless instance sovib qolsa, qayta `/login PAROL` qilish kerak bo'lishi mumkin.
 
 BayClub arizasida quyidagilar yuboriladi:
 
@@ -75,6 +87,9 @@ TELEGRAM_DOMESTIC_TOPIC_ID=3
 TELEGRAM_BAYCLUB_TOPIC_ID=4
 TELEGRAM_PROMO_TOPIC_ID=5
 TELEGRAM_CONTACT_TOPIC_ID=6
+TELEGRAM_BROADCAST_PASSWORD=strong-secret-password
+TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@adminusername
+TELEGRAM_PROMO_SCAN_LIMIT=500
 TELEGRAM_API_ID=123456
 TELEGRAM_API_HASH=abcdef123456...
 TELEGRAM_ADMIN_SESSION=1AQA...
@@ -92,6 +107,20 @@ Aksiyalar obunasi uchun Vercelga qo'shiladigan env nomi:
 TELEGRAM_PROMO_TOPIC_ID=<Aksiyalar topic message_thread_id>
 ```
 
+Bot orqali aksiyalarni tarqatish uchun Vercelga qo'shiladigan envlar:
+
+```env
+TELEGRAM_BROADCAST_PASSWORD=<admin foydalanadigan maxfiy parol>
+TELEGRAM_BROADCAST_ADMIN_IDS=<ixtiyoriy: admin Telegram ID yoki username>
+TELEGRAM_PROMO_SCAN_LIMIT=500
+```
+
+`TELEGRAM_BROADCAST_ADMIN_IDS` ixtiyoriy. Bo'sh qoldirilsa, parolni bilgan har qanday Telegram user command yubora oladi. Xavfsizroq variant: admin Telegram ID yoki username kiriting. Masalan:
+
+```env
+TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@baytrip_admin
+```
+
 Env varlarni qo'shgandan keyin loyihani qayta deploy qiling.
 
 ## Telegram bot sozlash
@@ -104,7 +133,7 @@ Env varlarni qo'shgandan keyin loyihani qayta deploy qiling.
    - Tashqi tur
    - Ichki tur
    - BayClub Card obunasi
-   - Aksiyalar obunasi
+   - Aksiyalar obunasi yoki Aksiyasi obunasi
    - Murojaat
 6. Har bir topic ichiga bitta test xabar yozing.
 7. Topic IDlarni olish uchun brauzer yoki terminalda Bot API `getUpdates` chaqiring:
@@ -116,6 +145,63 @@ curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates"
 Javob ichida kerakli xabar uchun `message_thread_id` qiymatini toping. Shu raqam topic ID bo'ladi.
 
 Guruh `chat_id` odatda `-100...` bilan boshlanadi. Uni ham `getUpdates` javobidagi `message.chat.id` dan oling.
+
+## Bot webhook va aksiyalar broadcast
+
+Bot commandlari ishlashi uchun Telegram webhook sayt endpointiga ulangan bo'lishi kerak:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<VERCEL_DOMAIN>/api/telegram"
+```
+
+Webhook ulanganini tekshirish:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
+```
+
+Bot admin panel commandlari:
+
+```text
+/start
+/login PAROL
+/panel
+/logout
+/promo PAROL xabar matni
+```
+
+Oddiy panel flow:
+
+```text
+/start
+/login myStrongPassword
+```
+
+Shundan keyin bot admin panelni inline tugmalar bilan chiqaradi:
+
+```text
+📣 Aksiya xabar yuborish
+🚪 Chiqish
+```
+
+`Aksiya xabar yuborish` bosilgandan keyin keyingi yozilgan matn obunachilarga ketadi.
+
+Tezkor command varianti ham qolgan:
+
+```text
+/promo myStrongPassword Bugun Dubai tur paketlariga maxsus chegirma! Batafsil: baytrip.uz
+```
+
+Broadcast qanday ishlaydi:
+
+- Bot admin paneldagi tugma yoki `/promo` commandni qabul qiladi.
+- Login paroli `TELEGRAM_BROADCAST_PASSWORD` bilan solishtiriladi.
+- Agar `TELEGRAM_BROADCAST_ADMIN_IDS` berilgan bo'lsa, command yuborgan admin ID/username ham tekshiriladi.
+- API `TELEGRAM_PROMO_TOPIC_ID` topicidagi oxirgi xabarlarni o'qiydi.
+- Xabarlardan `@username` lar ajratib olinadi.
+- `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan har bir username lichkasiga promo xabar yuboriladi.
+
+Muhim: admin profil orqali xabar yuborish uchun `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_ADMIN_SESSION` envlari ishlashi kerak. Agar admin profil session ishlamasa, broadcast ham ishlamaydi.
 
 ## Admin profilidan 1-xabar yuborish
 

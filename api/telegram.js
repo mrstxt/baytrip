@@ -6,6 +6,11 @@ const LEAD_LABELS = {
   contact: "Murojaat",
 };
 
+const AUTHORIZED_CHATS = globalThis.__baytripAuthorizedChats || new Set();
+const PENDING_PROMO_CHATS = globalThis.__baytripPendingPromoChats || new Set();
+globalThis.__baytripAuthorizedChats = AUTHORIZED_CHATS;
+globalThis.__baytripPendingPromoChats = PENDING_PROMO_CHATS;
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -32,6 +37,303 @@ function getAdminProfileConfig() {
   }
 
   return { apiId, apiHash, session };
+}
+
+function getBroadcastPassword() {
+  return clean(process.env.TELEGRAM_BROADCAST_PASSWORD, "");
+}
+
+function getAllowedAdminIds() {
+  return clean(process.env.TELEGRAM_BROADCAST_ADMIN_IDS, "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isAllowedAdmin(message) {
+  const allowed = getAllowedAdminIds();
+  if (allowed.length === 0) return true;
+
+  const from = message?.from;
+  const id = from?.id ? String(from.id) : "";
+  const username = normalizeTelegramUsername(from?.username);
+  return allowed.includes(id) || allowed.includes(username) || allowed.includes(`@${username}`);
+}
+
+async function sendBotMessage(token, chatId, text, extra = {}) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...extra,
+    }),
+  });
+
+  return response.json().catch(() => null);
+}
+
+async function answerCallbackQuery(token, callbackQueryId, text = "") {
+  const response = await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: callbackQueryId,
+      text,
+    }),
+  });
+
+  return response.json().catch(() => null);
+}
+
+function buildAdminPanelKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "📣 Aksiya xabar yuborish", callback_data: "promo_broadcast" }],
+      [{ text: "🚪 Chiqish", callback_data: "logout" }],
+    ],
+  };
+}
+
+async function sendAdminPanel(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      "<b>BayTrip admin panel</b>",
+      "",
+      "Hozircha mavjud bo'lim:",
+      "📣 Aksiyalar obunachilariga xabar yuborish",
+    ].join("\n"),
+    { reply_markup: buildAdminPanelKeyboard() }
+  );
+}
+
+async function runPromoBroadcast(token, chatId, promoMessage) {
+  if (promoMessage.length < 5) {
+    await sendBotMessage(token, chatId, "Xabar juda qisqa. Iltimos, to'liq aksiya matnini yuboring.");
+    return;
+  }
+
+  await sendBotMessage(token, chatId, "Yuborish boshlandi. Obunachilar Aksiyalar topicidan yig'ilmoqda...");
+
+  try {
+    const result = await broadcastPromoMessage(promoMessage);
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        "<b>Aksiya xabari yuborildi</b>",
+        `Topildi: ${result.usernames.length}`,
+        `Yuborildi: ${result.sent.length}`,
+        `Xato: ${result.failed.length}`,
+        result.failed.length ? `\nXato username'lar: ${result.failed.map((item) => `@${item.username}`).join(", ")}` : "",
+      ].join("\n"),
+      { reply_markup: buildAdminPanelKeyboard() }
+    );
+  } catch (error) {
+    await sendBotMessage(token, chatId, `Broadcast xatoligi: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
+  }
+}
+
+async function withAdminClient(fn) {
+  const config = getAdminProfileConfig();
+  if (!config) {
+    throw new Error("Admin profil seansi sozlanmagan.");
+  }
+
+  const [{ TelegramClient }, { StringSession }] = await Promise.all([
+    import("telegram"),
+    import("telegram/sessions/index.js"),
+  ]);
+
+  const client = new TelegramClient(new StringSession(config.session), config.apiId, config.apiHash, {
+    connectionRetries: 2,
+  });
+
+  try {
+    await client.connect();
+    return await fn(client);
+  } finally {
+    await client.disconnect().catch(() => {});
+  }
+}
+
+function extractUsernames(text) {
+  const found = new Set();
+  for (const match of String(text ?? "").matchAll(/@([a-zA-Z0-9_]{5,32})/g)) {
+    found.add(match[1]);
+  }
+  return [...found];
+}
+
+async function getPromoSubscribersFromTopic() {
+  const topicId = getTopicId("promo-subscribe");
+  if (!topicId) {
+    throw new Error("TELEGRAM_PROMO_TOPIC_ID kiritilmagan.");
+  }
+
+  const limit = Number(process.env.TELEGRAM_PROMO_SCAN_LIMIT || 500);
+  return withAdminClient(async (client) => {
+    const usernames = new Set();
+    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const iterator = client.iterMessages(entity, {
+      limit: Number.isFinite(limit) ? limit : 500,
+      replyTo: topicId,
+    });
+
+    for await (const message of iterator) {
+      extractUsernames(message.message).forEach((username) => usernames.add(username));
+    }
+
+    return [...usernames];
+  });
+}
+
+async function broadcastPromoMessage(message) {
+  const usernames = await getPromoSubscribersFromTopic();
+  const results = await withAdminClient(async (client) => {
+    const sent = [];
+    const failed = [];
+
+    for (const username of usernames) {
+      try {
+        await client.sendMessage(`@${username}`, { message });
+        sent.push(username);
+      } catch (error) {
+        failed.push({
+          username,
+          error: error instanceof Error ? error.message : "noma'lum xatolik",
+        });
+      }
+    }
+
+    return { sent, failed };
+  });
+
+  return { usernames, ...results };
+}
+
+async function handleBotUpdate(body, token) {
+  if (body.callback_query) {
+    const callback = body.callback_query;
+    const chatId = callback.message?.chat?.id;
+    const data = clean(callback.data, "");
+
+    if (!chatId) return { ok: true, ignored: true };
+    await answerCallbackQuery(token, callback.id);
+
+    if (!AUTHORIZED_CHATS.has(String(chatId))) {
+      await sendBotMessage(token, chatId, "Avval login qiling: <code>/login PAROL</code>");
+      return { ok: true };
+    }
+
+    if (data === "promo_broadcast") {
+      PENDING_PROMO_CHATS.add(String(chatId));
+      await sendBotMessage(token, chatId, "Aksiya xabar matnini yuboring. Keyingi yozgan matningiz obunachilarga ketadi.");
+      return { ok: true };
+    }
+
+    if (data === "logout") {
+      AUTHORIZED_CHATS.delete(String(chatId));
+      PENDING_PROMO_CHATS.delete(String(chatId));
+      await sendBotMessage(token, chatId, "Admin paneldan chiqdingiz. Qayta kirish: <code>/login PAROL</code>");
+      return { ok: true };
+    }
+
+    return { ok: true, ignored: true };
+  }
+
+  const message = body.message || body.edited_message;
+  const text = clean(message?.text, "");
+  const chatId = message?.chat?.id;
+
+  if (!message || !chatId || !text) {
+    return { ok: true, ignored: true };
+  }
+
+  if (!isAllowedAdmin(message)) {
+    await sendBotMessage(token, chatId, "Bu bot admin paneli uchun ruxsatingiz yo'q.");
+    return { ok: true };
+  }
+
+  if (PENDING_PROMO_CHATS.has(String(chatId)) && !text.startsWith("/")) {
+    PENDING_PROMO_CHATS.delete(String(chatId));
+    await runPromoBroadcast(token, chatId, text);
+    return { ok: true };
+  }
+
+  if (text.startsWith("/start")) {
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        "<b>BayTrip aksiyalar bot boshqaruvi</b>",
+        "",
+        "Admin panelga kirish uchun parol yuboring:",
+        "<code>/login PAROL</code>",
+        "",
+        "Parol Vercel env ichidagi <code>TELEGRAM_BROADCAST_PASSWORD</code> qiymatidan olinadi.",
+      ].join("\n")
+    );
+    return { ok: true };
+  }
+
+  if (text.startsWith("/login")) {
+    const password = text.replace(/^\/login(@\w+)?\s*/i, "").trim();
+    if (!getBroadcastPassword()) {
+      await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
+    } else if (password === getBroadcastPassword()) {
+      AUTHORIZED_CHATS.add(String(chatId));
+      await sendAdminPanel(token, chatId);
+    } else {
+      await sendBotMessage(token, chatId, "Parol noto'g'ri.");
+    }
+    return { ok: true };
+  }
+
+  if (text.startsWith("/panel")) {
+    if (!AUTHORIZED_CHATS.has(String(chatId))) {
+      await sendBotMessage(token, chatId, "Avval login qiling: <code>/login PAROL</code>");
+      return { ok: true };
+    }
+    await sendAdminPanel(token, chatId);
+    return { ok: true };
+  }
+
+  if (text.startsWith("/logout")) {
+    AUTHORIZED_CHATS.delete(String(chatId));
+    PENDING_PROMO_CHATS.delete(String(chatId));
+    await sendBotMessage(token, chatId, "Admin paneldan chiqdingiz.");
+    return { ok: true };
+  }
+
+  if (text.startsWith("/promo") || text.startsWith("/aksiya")) {
+    const bodyText = text.replace(/^\/(promo|aksiya)(@\w+)?\s*/i, "").trim();
+    const [password, ...messageParts] = bodyText.split(/\s+/);
+    const promoMessage = messageParts.join(" ").trim();
+
+    if (!getBroadcastPassword()) {
+      await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
+      return { ok: true };
+    }
+    if (password !== getBroadcastPassword()) {
+      await sendBotMessage(token, chatId, "Parol noto'g'ri.");
+      return { ok: true };
+    }
+    if (promoMessage.length < 5) {
+      await sendBotMessage(token, chatId, "Xabar matnini kiriting: <code>/promo PAROL xabar matni</code>");
+      return { ok: true };
+    }
+
+    await runPromoBroadcast(token, chatId, promoMessage);
+    return { ok: true };
+  }
+
+  return { ok: true, ignored: true };
 }
 
 function validateLead(body) {
@@ -233,6 +535,11 @@ export default async function handler(req, res) {
     } catch {
       return res.status(400).json({ ok: false, error: "JSON formati noto'g'ri." });
     }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body ?? {}, "update_id")) {
+    const result = await handleBotUpdate(body, token);
+    return res.status(200).json(result);
   }
 
   const error = validateLead(body);
