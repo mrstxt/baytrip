@@ -8,8 +8,8 @@ import { useApp } from "../store";
 const cardDesigns = [
   {
     type: "Men",
-    holder: "AZIZBEK KARIMOV",
-    number: "4589 2034 7712 6408",
+    holder: "BAYCLUB MEN",
+    number: "1100 0000 0000 0000",
     accent: "#111827",
     second: "#ffc21a",
     chip: "#f6c453",
@@ -20,8 +20,8 @@ const cardDesigns = [
   },
   {
     type: "Women",
-    holder: "MADINA ALIEVA",
-    number: "4589 2034 8825 1936",
+    holder: "BAYCLUB WOMEN",
+    number: "2200 0000 0000 0000",
     accent: "#ff3b30",
     second: "#ffc21a",
     chip: "#ffd7cf",
@@ -32,8 +32,8 @@ const cardDesigns = [
   },
   {
     type: "Family",
-    holder: "KARIMOV FAMILY",
-    number: "4589 2034 9360 2271",
+    holder: "BAYCLUB FAMILY",
+    number: "3300 0000 0000 0000",
     accent: "#21d0f0",
     second: "#ffc21a",
     chip: "#b7f3ff",
@@ -122,7 +122,7 @@ function BayClubPlasticCard({
   return (
     <Reveal delay={design.delay}>
       <div
-        className="group relative mx-auto aspect-[1.586/1] w-full max-w-[360px] animate-floaty overflow-hidden rounded-[26px] p-5 text-white shadow-[0_28px_70px_-30px_rgba(14,36,82,0.85)] ring-1 ring-white/30 transition duration-500 hover:-translate-y-2 hover:rotate-[-1deg] hover:shadow-[0_34px_85px_-28px_rgba(14,36,82,0.95)]"
+        className="group relative mx-auto aspect-[1.586/1] w-full max-w-[360px] animate-floaty overflow-hidden rounded-[26px] p-4 text-white shadow-[0_28px_70px_-30px_rgba(14,36,82,0.85)] ring-1 ring-white/30 transition duration-500 hover:-translate-y-2 hover:rotate-[-1deg] hover:shadow-[0_34px_85px_-28px_rgba(14,36,82,0.95)] sm:p-5"
         style={{
           animationDelay: `${index * 0.8}s`,
           background: design.background,
@@ -134,27 +134,27 @@ function BayClubPlasticCard({
             background: `radial-gradient(circle at 16% 20%, ${design.accent} 0 12%, transparent 13% 100%), radial-gradient(circle at 88% 18%, rgba(255,255,255,0.15) 0 17%, transparent 18% 100%), radial-gradient(circle at 92% 92%, ${design.second} 0 17%, transparent 18% 100%)`,
           }}
         />
-        <div className="absolute -right-12 top-12 h-44 w-44 rounded-full bg-white/10" />
-        <div className="absolute -right-4 top-20 h-44 w-44 rounded-full bg-white/10" />
+        <div className="absolute -right-14 top-12 h-40 w-40 rounded-full bg-white/10 sm:h-44 sm:w-44" />
+        <div className="absolute -right-8 top-20 h-40 w-40 rounded-full bg-white/10 sm:h-44 sm:w-44" />
         <div className="absolute -bottom-11 -left-10 h-28 w-28 rounded-full border-[14px]" style={{ borderColor: design.accent }} />
         <div className="absolute -bottom-2 -left-12 h-24 w-24 rounded-full border-[14px]" style={{ borderColor: design.second }} />
         <div
-          className="absolute right-5 top-14 grid h-16 w-16 place-items-center rounded-full"
+          className="absolute right-4 top-14 grid h-14 w-14 place-items-center rounded-full sm:right-5 sm:h-16 sm:w-16"
           style={{ backgroundColor: design.second }}
         >
           <CardIcon type={design.icon} />
           <span className="absolute -bottom-1 right-3 h-5 w-5 rotate-45 rounded-[5px]" style={{ backgroundColor: design.second }} />
         </div>
         <div className="absolute left-0 top-0 h-full w-1/3 -skew-x-12 bg-white/20 opacity-0 blur-lg transition duration-700 group-hover:translate-x-[380px] group-hover:opacity-100" />
-        <div className="absolute -left-3.5 top-2.5 z-10 flex h-12 w-[180px] items-center">
+        <div className="absolute -left-3 top-2 z-10 flex h-11 w-[160px] items-center sm:-left-3.5 sm:top-2.5 sm:h-12 sm:w-[180px]">
           <img
             src="/bayclub.png"
             alt="bayClub"
-            className="h-11 w-full object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.28)]"
+            className="h-10 w-full object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.28)] sm:h-11"
             draggable={false}
           />
         </div>
-        <span className="absolute right-4 top-4 z-10 rounded-full bg-white/15 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] ring-1 ring-white/20">
+        <span className="absolute right-3 top-3 z-10 rounded-full bg-white/15 px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.14em] ring-1 ring-white/20 sm:right-4 sm:top-4 sm:px-3 sm:text-[10px]">
           {design.type}
         </span>
 
@@ -163,17 +163,17 @@ function BayClubPlasticCard({
 
           <div>
             <CardChip color={design.chip} />
-            <p className="mt-4 font-display text-[20px] font-extrabold tracking-[0.12em] text-white drop-shadow-sm">
+            <p className="mt-3 whitespace-nowrap font-display text-[clamp(16px,5.4vw,20px)] font-extrabold tracking-[0.06em] text-white drop-shadow-sm sm:mt-4 sm:tracking-[0.1em]">
               {design.number}
             </p>
           </div>
 
-          <div className="flex items-end justify-between gap-4">
-            <div>
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/65">Card holder</p>
-              <p className="mt-1 text-[12px] font-extrabold uppercase tracking-[0.12em]">{design.holder}</p>
+              <p className="mt-1 truncate text-[11px] font-extrabold uppercase tracking-[0.08em] sm:text-[12px] sm:tracking-[0.12em]">{design.holder}</p>
             </div>
-            <div className="text-right">
+            <div className="shrink-0 text-right">
               <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-white/80">Discount</p>
               <p className="font-display text-4xl font-extrabold leading-none text-white">20%</p>
             </div>
