@@ -15,40 +15,26 @@ import {
 import { formatPrice, type TourBase } from "../data";
 import { sendLead, type LeadType } from "../lib/leads";
 import { useApp } from "../store";
+import { formatSelectedTourDate, getTodayInputValue, getUpcomingTourDates } from "../utils/tourDates";
 import { Stars } from "./ui";
 
 type TourRequestType = Extract<LeadType, "external-tour" | "domestic-tour">;
-
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatSelectedDate(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return value;
-
-  return new Intl.DateTimeFormat("uz-UZ", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(year, month - 1, day));
-}
 
 export default function TourModal({
   tour,
   onClose,
   requestType,
+  initialDate,
 }: {
   tour: TourBase;
   onClose: () => void;
   requestType: TourRequestType;
+  initialDate?: string;
 }) {
   const { toast } = useApp();
-  const today = toDateInputValue(new Date());
-  const [date, setDate] = useState(today);
+  const today = getTodayInputValue();
+  const suggestedDates = getUpcomingTourDates(tour.id, 3);
+  const [date, setDate] = useState(initialDate && initialDate >= today ? initialDate : suggestedDates[0]?.inputValue ?? today);
   const [people, setPeople] = useState(2);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -90,7 +76,7 @@ export default function TourModal({
         tourTitle: tour.title,
         tourCity: tour.city,
         tourCountry: tour.country,
-        date: formatSelectedDate(date),
+        date: formatSelectedTourDate(date),
         people,
         price: formatPrice(tour.price, tour.currency),
         total: formatPrice(tour.price * people, tour.currency),
@@ -218,6 +204,18 @@ export default function TourModal({
                   <p className="mt-1.5 text-xs font-semibold text-slate-400">
                     Faqat bugungi va kelajak sanalari tanlanadi.
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {suggestedDates.map((item) => (
+                      <button
+                        key={item.inputValue}
+                        type="button"
+                        onClick={() => setDate(item.inputValue)}
+                        className="rounded-full bg-brand-50 px-3 py-1.5 text-xs font-extrabold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-100"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 </label>
 
                 <div className="mt-4 flex items-center justify-between rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">

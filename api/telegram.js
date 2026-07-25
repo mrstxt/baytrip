@@ -71,9 +71,8 @@ function buildClientGreeting(body) {
     return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. Sayt orqali "${request}" bo'yicha murojaat qilgan ekansiz. Sizga yordam berish uchun yozdim.`;
   }
 
-  const tourTitle = clean(body.tourTitle);
-  const destination = `${clean(body.tourCity)}, ${clean(body.tourCountry)}`;
-  return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. "${tourTitle}" (${destination}) tur paketi bo'yicha murojaat qilgan ekansiz. Sizga batafsil ma'lumot berish uchun yozdim.`;
+  const destination = clean(body.tourCountry);
+  return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. "${destination} turlari" bo'yicha murojaat qilgan ekansiz. Sizga batafsil ma'lumot berish uchun yozdim.`;
 }
 
 function buildProfileDeliveryText(delivery) {

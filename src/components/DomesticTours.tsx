@@ -2,11 +2,34 @@ import { useMemo, useState } from "react";
 import { Clock, Compass, MapPin, Sparkles, Star } from "lucide-react";
 import { DOMESTIC_CATEGORIES, DOMESTIC_TOURS, formatPrice, type DomesticTour } from "../data";
 import { cn } from "../utils/cn";
+import { getUpcomingTourDates } from "../utils/tourDates";
 import { BrandPattern } from "./Brand";
 import Reveal from "./Reveal";
 import TourModal from "./TourModal";
 
 const isFeatured = (t: DomesticTour) => !!t.tag || !!t.oldPrice;
+
+function UpcomingDates({ tourId, onSelect }: { tourId: string; onSelect?: (date: string) => void }) {
+  const dates = getUpcomingTourDates(tourId, 3);
+
+  return (
+    <div className="mt-3">
+      <p className="text-[10px] font-extrabold uppercase tracking-widest text-ink-soft">Yaqin sanalar</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {dates.map((date) => (
+          <button
+            key={date.inputValue}
+            type="button"
+            onClick={() => onSelect?.(date.inputValue)}
+            className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-bold text-ink-soft ring-1 ring-black/[0.04] transition hover:-translate-y-0.5 hover:ring-emerald-300"
+          >
+            {date.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const InstagramIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
@@ -17,6 +40,7 @@ const InstagramIcon = ({ className }: { className?: string }) => (
 export default function DomesticTours() {
   const [category, setCategory] = useState<(typeof DOMESTIC_CATEGORIES)[number]["id"]>("all");
   const [selected, setSelected] = useState<DomesticTour | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | undefined>();
 
   const filtered = useMemo(
     () => (category === "all" ? DOMESTIC_TOURS : DOMESTIC_TOURS.filter((t) => t.category === category)),
@@ -80,7 +104,13 @@ export default function DomesticTours() {
                   <span className="absolute inset-x-0 top-0 z-10 h-1 bg-gradient-to-r from-emerald-500 to-brand-500" />
                 )}
 
-                <button onClick={() => setSelected(t)} className="relative block h-56 overflow-hidden text-left">
+                <button
+                  onClick={() => {
+                    setSelectedDate(undefined);
+                    setSelected(t);
+                  }}
+                  className="relative block h-56 overflow-hidden text-left"
+                >
                   <img
                     src={t.image}
                     alt={t.title}
@@ -124,10 +154,14 @@ export default function DomesticTours() {
                       <Star className="h-3 w-3 fill-sun text-sun" /> {t.rating}
                       <span className="font-semibold text-slate-400">({t.reviews})</span>
                     </span>
-                    <span className="rounded-full bg-surface px-2.5 py-1 ring-1 ring-black/[0.04]">
-                      {t.nextDates[0]}
-                    </span>
                   </div>
+                  <UpcomingDates
+                    tourId={t.id}
+                    onSelect={(date) => {
+                      setSelectedDate(date);
+                      setSelected(t);
+                    }}
+                  />
 
                   <div className="mt-auto pt-5">
                     <div className="flex items-end justify-between gap-3 border-t border-black/[0.06] pt-4">
@@ -143,7 +177,10 @@ export default function DomesticTours() {
                         </p>
                       </div>
                       <button
-                        onClick={() => setSelected(t)}
+                        onClick={() => {
+                          setSelectedDate(undefined);
+                          setSelected(t);
+                        }}
                         className="rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 px-5 py-2.5 text-[13px] font-extrabold text-white shadow-md shadow-emerald-600/30 transition-all hover:shadow-lg hover:shadow-emerald-600/40 hover:brightness-110 active:scale-95"
                       >
                         Batafsil
@@ -157,7 +194,14 @@ export default function DomesticTours() {
         </div>
       </div>
 
-      {selected && <TourModal tour={selected} requestType="domestic-tour" onClose={() => setSelected(null)} />}
+      {selected && (
+        <TourModal
+          tour={selected}
+          requestType="domestic-tour"
+          initialDate={selectedDate}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </section>
   );
 }
