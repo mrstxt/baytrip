@@ -26,6 +26,14 @@ TELEGRAM_ADMIN_SESSION=1AQA...
 
 `TELEGRAM_ADMIN_SESSION` admin profilining session stringi bo'ladi. Bu maxfiy qiymat: uni repo ichiga yozmang, faqat Vercel env vars ichida saqlang. Agar bu uchta env var kiritilmasa, ariza baribir guruhga tushadi, lekin mijozga admin profilidan avtomatik xabar yuborilmaydi.
 
+Session olish uchun lokal terminalda:
+
+```bash
+TELEGRAM_API_ID=123456 TELEGRAM_API_HASH=abcdef123456 npm run telegram:session
+```
+
+Script admin telefon raqami, Telegramdan kelgan kod va 2FA parolni so'raydi. Oxirida chiqqan `TELEGRAM_ADMIN_SESSION` qiymatini Vercel env vars ichiga kiriting.
+
 ## Telegram bot sozlash
 
 1. Telegramda `@BotFather` orqali bot yarating va tokenni oling.

@@ -15,10 +15,27 @@ import {
 import { formatPrice, type TourBase } from "../data";
 import { sendLead, type LeadType } from "../lib/leads";
 import { useApp } from "../store";
-import { cn } from "../utils/cn";
 import { Stars } from "./ui";
 
 type TourRequestType = Extract<LeadType, "external-tour" | "domestic-tour">;
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatSelectedDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+
+  return new Intl.DateTimeFormat("uz-UZ", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day));
+}
 
 export default function TourModal({
   tour,
@@ -30,7 +47,8 @@ export default function TourModal({
   requestType: TourRequestType;
 }) {
   const { toast } = useApp();
-  const [date, setDate] = useState(tour.nextDates[0]);
+  const today = toDateInputValue(new Date());
+  const [date, setDate] = useState(today);
   const [people, setPeople] = useState(2);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -52,6 +70,7 @@ export default function TourModal({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (sending) return;
+    if (!date || date < today) return setErr("Chiqish sanasini bugungi yoki kelajak sanadan tanlang.");
     if (name.trim().length < 3) return setErr("Ismingizni to'liq kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
     const normalizedTelegram = telegramUsername.trim().replace(/^@+/, "");
@@ -71,7 +90,7 @@ export default function TourModal({
         tourTitle: tour.title,
         tourCity: tour.city,
         tourCountry: tour.country,
-        date,
+        date: formatSelectedDate(date),
         people,
         price: formatPrice(tour.price, tour.currency),
         total: formatPrice(tour.price * people, tour.currency),
@@ -186,23 +205,19 @@ export default function TourModal({
                   <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">
                     <CalendarDays className="h-3.5 w-3.5" /> Chiqish sanasi
                   </span>
-                  <div className="flex flex-wrap gap-2">
-                    {tour.nextDates.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDate(d)}
-                        className={cn(
-                          "rounded-xl px-3.5 py-2 text-sm font-bold transition",
-                          date === d
-                            ? "bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/30"
-                            : "bg-white text-ink ring-1 ring-slate-200 hover:ring-brand-300"
-                        )}
-                      >
-                        {d}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+                    <CalendarDays className="h-4 w-4 text-brand-600" />
+                    <input
+                      type="date"
+                      value={date}
+                      min={today}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="w-full bg-transparent text-sm font-semibold text-ink outline-none"
+                    />
+                  </span>
+                  <p className="mt-1.5 text-xs font-semibold text-slate-400">
+                    Faqat bugungi va kelajak sanalari tanlanadi.
+                  </p>
                 </label>
 
                 <div className="mt-4 flex items-center justify-between rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
