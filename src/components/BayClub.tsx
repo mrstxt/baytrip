@@ -1,5 +1,5 @@
 import { AtSign, Check, Send, Sparkles, Users, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BayMark } from "./Brand";
 import Reveal from "./Reveal";
 import { sendLead } from "../lib/leads";
@@ -79,6 +79,11 @@ const plans = [
     benefits: ["6 oy davomida amal qiladi", "Har bir tur paketiga 20% chegirma", "BayClub takliflarida ustuvor aloqa", "Mavsumiy aksiyalar"],
   },
 ];
+
+type PlanOverride = {
+  price?: string;
+  oldPrice?: string;
+};
 
 function CardChip({ color }: { color: string }) {
   return (
@@ -185,6 +190,7 @@ function BayClubPlasticCard({
 
 export default function BayClub() {
   const { toast } = useApp();
+  const [planOverrides, setPlanOverrides] = useState<Record<string, PlanOverride>>({});
   const [cardType, setCardType] = useState(cardDesigns[0].type);
   const [planTitle, setPlanTitle] = useState(plans[1].title);
   const [showForm, setShowForm] = useState(false);
@@ -193,7 +199,23 @@ export default function BayClub() {
   const [telegramUsername, setTelegramUsername] = useState("");
   const [err, setErr] = useState("");
   const [sending, setSending] = useState(false);
-  const selectedPlan = plans.find((plan) => plan.title === planTitle) ?? plans[1];
+  const runtimePlans = plans.map((plan) => ({ ...plan, ...(planOverrides[plan.title] ?? {}) }));
+  const selectedPlan = runtimePlans.find((plan) => plan.title === planTitle) ?? runtimePlans[1];
+
+  useEffect(() => {
+    let alive = true;
+
+    fetch("/api/bayclub-config")
+      .then((response) => response.json())
+      .then((data: { ok?: boolean; plans?: Record<string, PlanOverride> }) => {
+        if (alive && data?.plans) setPlanOverrides(data.plans);
+      })
+      .catch(() => {});
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const openForm = (title: string) => {
     setPlanTitle(title);
@@ -262,7 +284,7 @@ export default function BayClub() {
         </div>
 
         <div className="mt-10 grid grid-cols-1 items-stretch gap-4 md:grid-cols-3">
-          {plans.map((plan, index) => (
+          {runtimePlans.map((plan, index) => (
             <Reveal key={plan.title} delay={180 + index * 80}>
               <div
                 className={`relative flex h-full flex-col overflow-hidden rounded-3xl p-6 text-center shadow-xl transition duration-300 hover:-translate-y-1 hover:shadow-2xl ${

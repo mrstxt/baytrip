@@ -6,10 +6,11 @@ const LEAD_LABELS = {
   contact: "Murojaat",
 };
 
-const AUTHORIZED_CHATS = globalThis.__baytripAuthorizedChats || new Set();
-const PENDING_PROMO_CHATS = globalThis.__baytripPendingPromoChats || new Set();
-globalThis.__baytripAuthorizedChats = AUTHORIZED_CHATS;
-globalThis.__baytripPendingPromoChats = PENDING_PROMO_CHATS;
+const PROMO_REPLY_MARKER = "Aksiya xabar matnini shu xabarga reply qilib yuboring.";
+const LOGIN_REPLY_MARKER = "Admin loginni shu xabarga reply qilib yuboring.";
+const PASSWORD_REPLY_MARKER = "Admin parolni shu xabarga reply qilib yuboring.";
+const PRICE_REPLY_MARKER = "BayClub tarif narxlarini shu xabarga reply qilib yuboring.";
+const PRICE_CONFIG_MARKER = "BAYCLUB_PRICE_CONFIG";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -41,6 +42,10 @@ function getAdminProfileConfig() {
 
 function getBroadcastPassword() {
   return clean(process.env.TELEGRAM_BROADCAST_PASSWORD, "");
+}
+
+function getAdminLogin() {
+  return clean(process.env.TELEGRAM_BOT_ADMIN_LOGIN || process.env.TELEGRAM_BROADCAST_LOGIN || "admin", "");
 }
 
 function getAllowedAdminIds() {
@@ -93,6 +98,7 @@ function buildAdminPanelKeyboard() {
   return {
     inline_keyboard: [
       [{ text: "📣 Aksiya xabar yuborish", callback_data: "promo_broadcast" }],
+      [{ text: "💳 BayClub narxlarini o'zgartirish", callback_data: "bayclub_prices" }],
       [{ text: "🚪 Chiqish", callback_data: "logout" }],
     ],
   };
@@ -105,8 +111,9 @@ async function sendAdminPanel(token, chatId) {
     [
       "<b>BayTrip admin panel</b>",
       "",
-      "Hozircha mavjud bo'lim:",
+      "Mavjud bo'limlar:",
       "📣 Aksiyalar obunachilariga xabar yuborish",
+      "💳 BayClub tarif narxlarini o'zgartirish",
     ].join("\n"),
     { reply_markup: buildAdminPanelKeyboard() }
   );
@@ -136,6 +143,107 @@ async function runPromoBroadcast(token, chatId, promoMessage) {
     );
   } catch (error) {
     await sendBotMessage(token, chatId, `Broadcast xatoligi: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
+  }
+}
+
+function parsePriceNumber(value) {
+  const digits = String(value ?? "").replace(/[^\d]/g, "");
+  if (!digits) return "";
+  return `${Number(digits).toLocaleString("ru-RU")} so'm`;
+}
+
+function parseBayClubPriceText(text) {
+  const config = {};
+  const aliases = {
+    "3": "3 oy",
+    "3oy": "3 oy",
+    "3 oy": "3 oy",
+    "6": "6 oy",
+    "6oy": "6 oy",
+    "6 oy": "6 oy",
+    "12": "12 oy",
+    "12oy": "12 oy",
+    "12 oy": "12 oy",
+  };
+
+  for (const rawLine of String(text ?? "").split(/\n+/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const [rawKey, rawValues] = line.split(/[:=]/);
+    if (!rawKey || !rawValues) continue;
+    const key = aliases[rawKey.trim().toLowerCase().replace(/\s+/g, " ")] ?? aliases[rawKey.trim().toLowerCase().replace(/\s+/g, "")];
+    if (!key) continue;
+    const [priceRaw, oldPriceRaw] = rawValues.split(/[|,;]/).map((item) => item.trim());
+    const price = parsePriceNumber(priceRaw);
+    const oldPrice = parsePriceNumber(oldPriceRaw);
+    if (price) {
+      config[key] = oldPrice ? { price, oldPrice } : { price };
+    }
+  }
+
+  return config;
+}
+
+function getBayClubConfigTopicId() {
+  const raw = process.env.TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID || process.env.TELEGRAM_BAYCLUB_TOPIC_ID;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+async function saveBayClubPriceConfig(token, config) {
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
+
+  const threadId = getBayClubConfigTopicId();
+  const text = [
+    `<b>${PRICE_CONFIG_MARKER}</b>`,
+    "",
+    `<code>${escapeHtml(JSON.stringify(config))}</code>`,
+  ].join("\n");
+
+  await sendBotMessage(
+    token,
+    chatId,
+    text,
+    threadId ? { message_thread_id: threadId } : {}
+  );
+}
+
+async function runBayClubPriceUpdate(token, chatId, text) {
+  const config = parseBayClubPriceText(text);
+  if (Object.keys(config).length === 0) {
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        "Narx formati noto'g'ri.",
+        "",
+        "Namuna:",
+        "<code>3=299000|399000</code>",
+        "<code>12=899000|1299000</code>",
+        "<code>6=499000|699000</code>",
+        "",
+        "Birinchi narx hozirgi narx, ikkinchisi chizilgan eski narx.",
+      ].join("\n")
+    );
+    return;
+  }
+
+  try {
+    await saveBayClubPriceConfig(token, config);
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        "<b>BayClub narxlari yangilandi</b>",
+        ...Object.entries(config).map(([title, value]) => `${title}: ${value.price}${value.oldPrice ? ` / eski: ${value.oldPrice}` : ""}`),
+        "",
+        "Sayt yangi config'ni /api/bayclub-config orqali o'qiydi.",
+      ].join("\n"),
+      { reply_markup: buildAdminPanelKeyboard() }
+    );
+  } catch (error) {
+    await sendBotMessage(token, chatId, `Narx saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
   }
 }
 
@@ -226,21 +334,52 @@ async function handleBotUpdate(body, token) {
     if (!chatId) return { ok: true, ignored: true };
     await answerCallbackQuery(token, callback.id);
 
-    if (!AUTHORIZED_CHATS.has(String(chatId))) {
-      await sendBotMessage(token, chatId, "Avval login qiling: <code>/login PAROL</code>");
+    if (data === "promo_broadcast") {
+      await sendBotMessage(
+        token,
+        chatId,
+        [
+          PROMO_REPLY_MARKER,
+          "",
+          "Masalan:",
+          "Bugun Dubai tur paketlariga maxsus chegirma! Batafsil: baytrip.uz",
+        ].join("\n"),
+        {
+          reply_markup: {
+            force_reply: true,
+            input_field_placeholder: "Aksiya xabar matni...",
+          },
+        }
+      );
       return { ok: true };
     }
 
-    if (data === "promo_broadcast") {
-      PENDING_PROMO_CHATS.add(String(chatId));
-      await sendBotMessage(token, chatId, "Aksiya xabar matnini yuboring. Keyingi yozgan matningiz obunachilarga ketadi.");
+    if (data === "bayclub_prices") {
+      await sendBotMessage(
+        token,
+        chatId,
+        [
+          PRICE_REPLY_MARKER,
+          "",
+          "Namuna:",
+          "<code>3=299000|399000</code>",
+          "<code>12=899000|1299000</code>",
+          "<code>6=499000|699000</code>",
+          "",
+          "Birinchi narx hozirgi narx, ikkinchisi chizilgan eski narx.",
+        ].join("\n"),
+        {
+          reply_markup: {
+            force_reply: true,
+            input_field_placeholder: "3=299000|399000...",
+          },
+        }
+      );
       return { ok: true };
     }
 
     if (data === "logout") {
-      AUTHORIZED_CHATS.delete(String(chatId));
-      PENDING_PROMO_CHATS.delete(String(chatId));
-      await sendBotMessage(token, chatId, "Admin paneldan chiqdingiz. Qayta kirish: <code>/login PAROL</code>");
+      await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login PAROL</code>");
       return { ok: true };
     }
 
@@ -255,14 +394,48 @@ async function handleBotUpdate(body, token) {
     return { ok: true, ignored: true };
   }
 
-  if (!isAllowedAdmin(message)) {
-    await sendBotMessage(token, chatId, "Bu bot admin paneli uchun ruxsatingiz yo'q.");
+  const replyText = clean(message.reply_to_message?.text, "");
+  if (replyText.includes(LOGIN_REPLY_MARKER) && !text.startsWith("/")) {
+    const login = text.trim();
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        PASSWORD_REPLY_MARKER,
+        `Login: <code>${escapeHtml(login)}</code>`,
+        "",
+        "Endi parolni shu xabarga reply qilib yuboring.",
+      ].join("\n"),
+      {
+        reply_markup: {
+          force_reply: true,
+          input_field_placeholder: "Parol...",
+        },
+      }
+    );
     return { ok: true };
   }
 
-  if (PENDING_PROMO_CHATS.has(String(chatId)) && !text.startsWith("/")) {
-    PENDING_PROMO_CHATS.delete(String(chatId));
+  if (replyText.includes(PASSWORD_REPLY_MARKER) && !text.startsWith("/")) {
+    const login = clean(replyText.match(/Login:\s*([^\s<]+)/)?.[1], "");
+    const password = text.trim();
+    if (!getBroadcastPassword()) {
+      await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
+    } else if (login === getAdminLogin() && password === getBroadcastPassword()) {
+      await sendAdminPanel(token, chatId);
+    } else {
+      await sendBotMessage(token, chatId, "Login yoki parol noto'g'ri. Qayta kirish: <code>/login</code>");
+    }
+    return { ok: true };
+  }
+
+  if (replyText.includes(PROMO_REPLY_MARKER) && !text.startsWith("/")) {
     await runPromoBroadcast(token, chatId, text);
+    return { ok: true };
+  }
+
+  if (replyText.includes(PRICE_REPLY_MARKER) && !text.startsWith("/")) {
+    await runBayClubPriceUpdate(token, chatId, text);
     return { ok: true };
   }
 
@@ -273,41 +446,41 @@ async function handleBotUpdate(body, token) {
       [
         "<b>BayTrip aksiyalar bot boshqaruvi</b>",
         "",
-        "Admin panelga kirish uchun parol yuboring:",
-        "<code>/login PAROL</code>",
+        "Admin panelga kirish:",
+        "<code>/login</code>",
         "",
-        "Parol Vercel env ichidagi <code>TELEGRAM_BROADCAST_PASSWORD</code> qiymatidan olinadi.",
+        "Login Vercel env ichidagi <code>TELEGRAM_BOT_ADMIN_LOGIN</code>, parol esa <code>TELEGRAM_BROADCAST_PASSWORD</code> qiymatidan olinadi.",
       ].join("\n")
     );
     return { ok: true };
   }
 
   if (text.startsWith("/login")) {
-    const password = text.replace(/^\/login(@\w+)?\s*/i, "").trim();
-    if (!getBroadcastPassword()) {
-      await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
-    } else if (password === getBroadcastPassword()) {
-      AUTHORIZED_CHATS.add(String(chatId));
-      await sendAdminPanel(token, chatId);
-    } else {
-      await sendBotMessage(token, chatId, "Parol noto'g'ri.");
-    }
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        LOGIN_REPLY_MARKER,
+        "",
+        "Admin loginni shu xabarga reply qilib yuboring.",
+      ].join("\n"),
+      {
+        reply_markup: {
+          force_reply: true,
+          input_field_placeholder: "Login...",
+        },
+      }
+    );
     return { ok: true };
   }
 
   if (text.startsWith("/panel")) {
-    if (!AUTHORIZED_CHATS.has(String(chatId))) {
-      await sendBotMessage(token, chatId, "Avval login qiling: <code>/login PAROL</code>");
-      return { ok: true };
-    }
-    await sendAdminPanel(token, chatId);
+    await sendBotMessage(token, chatId, "Panelni ochish uchun login qiling: <code>/login PAROL</code>");
     return { ok: true };
   }
 
   if (text.startsWith("/logout")) {
-    AUTHORIZED_CHATS.delete(String(chatId));
-    PENDING_PROMO_CHATS.delete(String(chatId));
-    await sendBotMessage(token, chatId, "Admin paneldan chiqdingiz.");
+    await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login PAROL</code>");
     return { ok: true };
   }
 

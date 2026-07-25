@@ -36,6 +36,7 @@ Aksiyalar obunasi uchun:
 - Vercel env var: `TELEGRAM_PROMO_TOPIC_ID`
 - Telegram topic tavsiya qilingan nomi: `Aksiyalar obunasi` yoki siz ochgan nom bilan `Aksiyasi obunasi`
 - Bot broadcast paroli: `TELEGRAM_BROADCAST_PASSWORD`
+- Bot admin login: `TELEGRAM_BOT_ADMIN_LOGIN`
 - Ixtiyoriy admin cheklovi: `TELEGRAM_BROADCAST_ADMIN_IDS`
 
 ## Telegram arizalar tizimi
@@ -58,11 +59,14 @@ Hozirgi broadcast ishlashi:
 
 - Saytdan username kiritilsa, ariza `Aksiyalar obunasi` topicga tushadi.
 - Admin botga `/start` bosadi va command yo'riqnomasini ko'radi.
-- Admin `/login PAROL` bilan admin panelga kiradi.
+- Admin `/login` bosadi, bot login so'raydi, keyin parol so'raydi.
 - Panelda `Aksiya xabar yuborish` tugmasi chiqadi.
-- Tugma bosilgandan keyin admin yozgan keyingi matn obunachilarga yuboriladi.
+- Panelda `BayClub narxlarini o'zgartirish` tugmasi chiqadi.
+- Tugma bosilgandan keyin bot reply so'rovi chiqaradi.
+- Admin shu so'rovga reply qilib yozgan matn obunachilarga yuboriladi.
 - Xabarlar bot nomidan emas, `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan lichkaga yuboriladi.
-- Vercel serverless warm instance ichida login holati saqlanadi. Agar serverless instance sovib qolsa, qayta `/login PAROL` qilish kerak bo'lishi mumkin.
+- Flow xotiraga bog'lanmagan: deploydan keyin ham reply qilingan xabar orqali broadcast aniqlanadi.
+- BayClub narxlari bot orqali Telegram config topicga yoziladi va sayt `/api/bayclub-config` orqali o'qiydi.
 
 BayClub arizasida quyidagilar yuboriladi:
 
@@ -87,9 +91,11 @@ TELEGRAM_DOMESTIC_TOPIC_ID=3
 TELEGRAM_BAYCLUB_TOPIC_ID=4
 TELEGRAM_PROMO_TOPIC_ID=5
 TELEGRAM_CONTACT_TOPIC_ID=6
+TELEGRAM_BOT_ADMIN_LOGIN=admin
 TELEGRAM_BROADCAST_PASSWORD=strong-secret-password
 TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@adminusername
 TELEGRAM_PROMO_SCAN_LIMIT=500
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=4
 TELEGRAM_API_ID=123456
 TELEGRAM_API_HASH=abcdef123456...
 TELEGRAM_ADMIN_SESSION=1AQA...
@@ -110,12 +116,13 @@ TELEGRAM_PROMO_TOPIC_ID=<Aksiyalar topic message_thread_id>
 Bot orqali aksiyalarni tarqatish uchun Vercelga qo'shiladigan envlar:
 
 ```env
+TELEGRAM_BOT_ADMIN_LOGIN=<admin login>
 TELEGRAM_BROADCAST_PASSWORD=<admin foydalanadigan maxfiy parol>
 TELEGRAM_BROADCAST_ADMIN_IDS=<ixtiyoriy: admin Telegram ID yoki username>
 TELEGRAM_PROMO_SCAN_LIMIT=500
 ```
 
-`TELEGRAM_BROADCAST_ADMIN_IDS` ixtiyoriy. Bo'sh qoldirilsa, parolni bilgan har qanday Telegram user command yubora oladi. Xavfsizroq variant: admin Telegram ID yoki username kiriting. Masalan:
+`TELEGRAM_BROADCAST_ADMIN_IDS` ixtiyoriy. Hozirgi panel login va parol orqali ishlaydi; bu env keyingi qo'shimcha himoya uchun qoldirilgan.
 
 ```env
 TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@baytrip_admin
@@ -164,7 +171,7 @@ Bot admin panel commandlari:
 
 ```text
 /start
-/login PAROL
+/login
 /panel
 /logout
 /promo PAROL xabar matni
@@ -174,17 +181,17 @@ Oddiy panel flow:
 
 ```text
 /start
-/login myStrongPassword
+/login
 ```
 
-Shundan keyin bot admin panelni inline tugmalar bilan chiqaradi:
+Bot loginni so'raydi, keyin parolni so'raydi. Login/parol to'g'ri bo'lsa admin panel inline tugmalar bilan chiqadi:
 
 ```text
 📣 Aksiya xabar yuborish
 🚪 Chiqish
 ```
 
-`Aksiya xabar yuborish` bosilgandan keyin keyingi yozilgan matn obunachilarga ketadi.
+`Aksiya xabar yuborish` bosilgandan keyin bot reply prompt chiqaradi. Aksiya matnini aynan shu promptga reply qilib yuboring.
 
 Tezkor command varianti ham qolgan:
 
@@ -202,6 +209,30 @@ Broadcast qanday ishlaydi:
 - `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan har bir username lichkasiga promo xabar yuboriladi.
 
 Muhim: admin profil orqali xabar yuborish uchun `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_ADMIN_SESSION` envlari ishlashi kerak. Agar admin profil session ishlamasa, broadcast ham ishlamaydi.
+
+## Bot orqali BayClub narxlarini o'zgartirish
+
+Admin panelda `BayClub narxlarini o'zgartirish` tugmasi bor. Tugma bosilganda bot reply prompt chiqaradi. Narxlarni shu promptga reply qilib yuboring.
+
+Format:
+
+```text
+3=299000|399000
+12=899000|1299000
+6=499000|699000
+```
+
+Birinchi qiymat hozirgi narx, ikkinchi qiymat chizilgan eski narx.
+
+Bot bu configni Telegram guruhidagi config topicga yozadi. Sayt esa `GET /api/bayclub-config` orqali eng oxirgi configni o'qib, BayClub tarif narxlarini yangilaydi.
+
+Config topic env:
+
+```env
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=<config topic ID>
+```
+
+Agar `TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID` kiritilmasa, config `TELEGRAM_BAYCLUB_TOPIC_ID` topiciga yoziladi.
 
 ## Admin profilidan 1-xabar yuborish
 
