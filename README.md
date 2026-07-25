@@ -21,12 +21,20 @@ BayClub Card bo'limi qo'shildi:
 - Modalda faqat card turi (`Men`, `Women`, `Family`) va arizachi ma'lumotlari so'raladi.
 - Qaysi tarif tugmasi bosilgan bo'lsa, shu tarif avtomatik arizaga qo'shiladi.
 - Modal `X` tugmasi bilan yopiladi.
+- Footer ichidagi aksiyalar obunasi emaildan Telegram username formasiga almashtirildi.
+- Aksiyalar obunasi `promo-subscribe` lead turi sifatida Telegram topicga yuboriladi.
 
 Telegram ariza tizimiga yangi `BayClub Card obunasi` turi qo'shildi:
 
 - Frontend lead type: `bayclub-card`
 - Vercel env var: `TELEGRAM_BAYCLUB_TOPIC_ID`
 - Telegram topic tavsiya qilingan nomi: `BayClub Card obunasi`
+
+Aksiyalar obunasi uchun:
+
+- Frontend lead type: `promo-subscribe`
+- Vercel env var: `TELEGRAM_PROMO_TOPIC_ID`
+- Telegram topic tavsiya qilingan nomi: `Aksiyalar obunasi`
 
 ## Telegram arizalar tizimi
 
@@ -37,9 +45,12 @@ Yo'naltirish tartibi:
 - Tashqi tur paketlari: `TELEGRAM_EXTERNAL_TOPIC_ID`
 - Ichki tur paketlari va qo'shni davlat turlari: `TELEGRAM_DOMESTIC_TOPIC_ID`
 - BayClub Card obunasi: `TELEGRAM_BAYCLUB_TOPIC_ID`
+- Aksiyalar obunasi: `TELEGRAM_PROMO_TOPIC_ID`
 - Boshqa murojaatlar: `TELEGRAM_CONTACT_TOPIC_ID`
 
 Telegram xabarida mijoz ismi, telefon raqami, Telegram username, ariza turi, tanlangan tur yoki BayClub ma'lumotlari, manba va admin profilidan yuboriladigan 1-xabar statusi ko'rsatiladi.
+
+Footer aksiyalar obunasida foydalanuvchi Telegram username qoldiradi. Telegram bot foydalanuvchiga lichkaga xabar yuborishi uchun foydalanuvchi avval botga `/start` bosgan bo'lishi kerak. Username qoldirish obunachi ro'yxatini yig'ish uchun ishlaydi; ommaviy broadcast qilish uchun alohida subscriber storage va bot broadcast endpoint kerak bo'ladi.
 
 BayClub arizasida quyidagilar yuboriladi:
 
@@ -62,7 +73,8 @@ TELEGRAM_CHAT_ID=-1001234567890
 TELEGRAM_EXTERNAL_TOPIC_ID=2
 TELEGRAM_DOMESTIC_TOPIC_ID=3
 TELEGRAM_BAYCLUB_TOPIC_ID=4
-TELEGRAM_CONTACT_TOPIC_ID=5
+TELEGRAM_PROMO_TOPIC_ID=5
+TELEGRAM_CONTACT_TOPIC_ID=6
 TELEGRAM_API_ID=123456
 TELEGRAM_API_HASH=abcdef123456...
 TELEGRAM_ADMIN_SESSION=1AQA...
@@ -74,6 +86,12 @@ BayClub uchun Vercelga qo'shiladigan env nomi:
 TELEGRAM_BAYCLUB_TOPIC_ID=<BayClub topic message_thread_id>
 ```
 
+Aksiyalar obunasi uchun Vercelga qo'shiladigan env nomi:
+
+```env
+TELEGRAM_PROMO_TOPIC_ID=<Aksiyalar topic message_thread_id>
+```
+
 Env varlarni qo'shgandan keyin loyihani qayta deploy qiling.
 
 ## Telegram bot sozlash
@@ -82,10 +100,11 @@ Env varlarni qo'shgandan keyin loyihani qayta deploy qiling.
 2. Botni kerakli Telegram guruhiga qo'shing.
 3. Botga guruhda xabar yuborish huquqini bering. Odatda botni admin qilish eng oson yo'l.
 4. Guruhda Topics yoqilgan bo'lishi kerak.
-5. To'rtta topic yarating:
+5. Beshta topic yarating:
    - Tashqi tur
    - Ichki tur
    - BayClub Card obunasi
+   - Aksiyalar obunasi
    - Murojaat
 6. Har bir topic ichiga bitta test xabar yozing.
 7. Topic IDlarni olish uchun brauzer yoki terminalda Bot API `getUpdates` chaqiring:

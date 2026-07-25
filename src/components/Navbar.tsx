@@ -46,7 +46,7 @@ export default function Navbar() {
   const onHero = !scrolled;
 
   return (
-    <header className="fixed inset-x-0 top-10 z-50 px-4 pt-2 sm:px-6 sm:pt-2.5">
+    <header className="fixed inset-x-0 top-11 z-50 px-4 pt-2 sm:px-6 sm:pt-2.5">
       <div
         className={cn(
           "mx-auto flex max-w-6xl items-center gap-1 rounded-full py-2 pl-2 pr-3 transition-all duration-500 sm:gap-2 sm:py-2.5 sm:pl-3 sm:pr-5",

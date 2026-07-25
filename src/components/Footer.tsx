@@ -1,6 +1,7 @@
-import { CheckCircle2, Send } from "lucide-react";
+import { AtSign, CheckCircle2, Send } from "lucide-react";
 import { useState } from "react";
 import { useApp } from "../store";
+import { sendLead } from "../lib/leads";
 import { BrandLogo } from "./Brand";
 import Reveal from "./Reveal";
 
@@ -31,17 +32,34 @@ const SOCIALS = [
 
 export default function Footer() {
   const { toast } = useApp();
-  const [email, setEmail] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [done, setDone] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const subscribe = (e: React.FormEvent) => {
+  const subscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast("Email manzilini to'g'ri kiriting.", "error");
+    if (sending) return;
+    const normalizedTelegram = telegramUsername.trim().replace(/^@+/, "");
+    if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizedTelegram)) {
+      toast("Telegram username'ni to'g'ri kiriting. Masalan: baytrip_user", "error");
       return;
     }
-    setDone(true);
-    toast("Obuna rasmiylashtirildi — aksiyalar endi pochtangizda!");
+    setSending(true);
+    try {
+      await sendLead({
+        type: "promo-subscribe",
+        telegramUsername: `@${normalizedTelegram}`,
+        source: "Footer aksiyalar obunasi",
+      });
+      setDone(true);
+      setTelegramUsername("");
+      toast("Obuna qabul qilindi — aksiyalar Telegram lichkangizga yuboriladi!");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Obunani yuborib bo'lmadi.";
+      toast(message, "error");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -53,7 +71,7 @@ export default function Footer() {
             <div className="relative flex flex-wrap items-center justify-between gap-6">
               <div className="max-w-md">
                 <h3 className="font-display text-2xl font-extrabold sm:text-3xl">Aksiyalardan birinchi bo'lib xabardor bo'ling</h3>
-                <p className="mt-2 text-brand-100">Haftada bir marta — chegirmali turlar va yangi yo'nalishlar.</p>
+                <p className="mt-2 text-brand-100">Telegram username qoldiring. Botga /start bosgan mijozlarga chegirmali turlarni lichkaga yuboramiz.</p>
               </div>
               {done ? (
                 <p className="inline-flex items-center gap-2 rounded-full bg-white/15 px-6 py-3.5 text-sm font-bold ring-1 ring-white/25">
@@ -61,19 +79,24 @@ export default function Footer() {
                 </p>
               ) : (
                 <form onSubmit={subscribe} className="flex w-full max-w-md gap-2">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="pochtangiz@misol.uz"
-                    className="w-full rounded-full bg-white/95 px-5 py-3.5 text-sm font-semibold text-ink placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sun"
-                  />
+                  <span className="flex w-full items-center gap-2 rounded-full bg-white/95 px-5 py-3.5 text-ink focus-within:ring-2 focus-within:ring-sun">
+                    <AtSign className="h-4 w-4 shrink-0 text-brand-600" />
+                    <input
+                      value={telegramUsername}
+                      onChange={(event) => setTelegramUsername(event.target.value)}
+                      placeholder="telegram_username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      className="w-full bg-transparent text-sm font-semibold placeholder:text-slate-400 focus:outline-none"
+                    />
+                  </span>
                   <button
                     type="submit"
-                    className="inline-flex shrink-0 items-center gap-2 rounded-full bg-ink px-6 py-3.5 text-sm font-bold text-white transition hover:bg-brand-950 active:scale-95"
+                    disabled={sending}
+                    className="inline-flex shrink-0 items-center gap-2 rounded-full bg-ink px-6 py-3.5 text-sm font-bold text-white transition hover:bg-brand-950 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <Send className="h-4 w-4" />
-                    <span className="hidden sm:inline">Obuna</span>
+                    <span className="hidden sm:inline">{sending ? "Yuborilmoqda" : "Obuna"}</span>
                   </button>
                 </form>
               )}

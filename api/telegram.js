@@ -2,6 +2,7 @@ const LEAD_LABELS = {
   "external-tour": "Tashqi tur paketi",
   "domestic-tour": "Ichki tur paketi",
   "bayclub-card": "BayClub Card obunasi",
+  "promo-subscribe": "Aksiyalar obunasi",
   contact: "Murojaat",
 };
 
@@ -36,6 +37,12 @@ function getAdminProfileConfig() {
 function validateLead(body) {
   if (!body || typeof body !== "object") return "So'rov formati noto'g'ri.";
   if (!Object.prototype.hasOwnProperty.call(LEAD_LABELS, body.type)) return "So'rov turi noto'g'ri.";
+  if (body.type === "promo-subscribe") {
+    if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizeTelegramUsername(body.telegramUsername))) {
+      return "Telegram username noto'g'ri.";
+    }
+    return null;
+  }
   if (clean(body.name, "").length < 3) return "Ism to'liq emas.";
   if (!/^\+?[\d\s()-]{9,}$/.test(clean(body.phone, ""))) return "Telefon raqam noto'g'ri.";
   if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizeTelegramUsername(body.telegramUsername))) {
@@ -63,6 +70,7 @@ function getTopicId(type) {
     "external-tour": process.env.TELEGRAM_EXTERNAL_TOPIC_ID,
     "domestic-tour": process.env.TELEGRAM_DOMESTIC_TOPIC_ID,
     "bayclub-card": process.env.TELEGRAM_BAYCLUB_TOPIC_ID,
+    "promo-subscribe": process.env.TELEGRAM_PROMO_TOPIC_ID || process.env.TELEGRAM_CONTACT_TOPIC_ID,
     contact: process.env.TELEGRAM_CONTACT_TOPIC_ID,
   };
 
@@ -78,6 +86,10 @@ function buildClientGreeting(body) {
   if (body.type === "contact") {
     const request = clean(body.message, "murojaatingiz");
     return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. Sayt orqali "${request}" bo'yicha murojaat qilgan ekansiz. Sizga yordam berish uchun yozdim.`;
+  }
+
+  if (body.type === "promo-subscribe") {
+    return `Assalomu aleykum. BayTrip aksiyalari va chegirmali turlari haqida birinchi bo'lib xabar olish uchun obuna bo'lgan ekansiz. Tez orada eng yaxshi takliflarni yuboramiz.`;
   }
 
   if (body.type === "bayclub-card") {
@@ -147,12 +159,25 @@ function buildMessage(body, profileDelivery) {
   const lines = [
     `<b>${escapeHtml(label)}</b>`,
     "",
-    `👤 <b>Mijoz:</b> ${escapeHtml(clean(body.name))}`,
-    `📞 <b>Telefon:</b> ${escapeHtml(clean(body.phone))}`,
     `💬 <b>Telegram:</b> ${escapeHtml(telegramUsername)}`,
   ];
 
-  if (body.type === "contact") {
+  if (body.type !== "promo-subscribe") {
+    lines.splice(
+      2,
+      0,
+      `👤 <b>Mijoz:</b> ${escapeHtml(clean(body.name))}`,
+      `📞 <b>Telefon:</b> ${escapeHtml(clean(body.phone))}`
+    );
+  }
+
+  if (body.type === "promo-subscribe") {
+    lines.push(
+      "",
+      `📣 <b>Obuna:</b> Aksiyalar va chegirmali turlar`,
+      `✅ <b>Eslatma:</b> Bot orqali xabar yuborish uchun foydalanuvchi botga /start bosgan bo'lishi kerak.`
+    );
+  } else if (body.type === "contact") {
     lines.push(`💬 <b>Xabar:</b> ${escapeHtml(clean(body.message, "Ko'rsatilmagan"))}`);
   } else if (body.type === "bayclub-card") {
     lines.push(
