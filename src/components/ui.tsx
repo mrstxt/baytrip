@@ -1,8 +1,6 @@
-"use client";
-
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Minus, Plus } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { cn } from "../utils/cn";
 
 export function useOutsideClose(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);

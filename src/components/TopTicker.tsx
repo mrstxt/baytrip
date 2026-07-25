@@ -1,7 +1,5 @@
-"use client";
-
 import { Flame, Palmtree } from "lucide-react";
-import { TOURS, formatPrice } from "@/lib/data";
+import { TOURS, formatPrice } from "../data";
 
 export default function TopTicker() {
   const goTours = () => document.getElementById("turlar")?.scrollIntoView({ behavior: "smooth" });
@@ -40,8 +38,10 @@ export default function TopTicker() {
 
   return (
     <div className="group fixed inset-x-0 top-0 z-[60] h-10 overflow-hidden bg-brand-950">
+      {/* yuqori yaltirash chizig'i */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
+      {/* aylanuvchi lenta */}
       <div className="absolute inset-y-0 left-44 right-0 sm:left-52">
         <div className="flex h-full w-max items-center animate-marquee will-change-transform group-hover:[animation-play-state:paused]">
           <Row />
@@ -49,6 +49,7 @@ export default function TopTicker() {
         </div>
       </div>
 
+      {/* chapdagi brend yorlig'i */}
       <button
         onClick={goTours}
         className="absolute left-0 top-0 z-10 flex h-full w-44 items-center justify-center gap-1.5 bg-sun text-ink transition hover:bg-amber-300 sm:w-52"
@@ -59,7 +60,10 @@ export default function TopTicker() {
           Qaynoq takliflar
         </span>
       </button>
+      {/* yorliqdan keyingi xiralashish */}
       <div className="pointer-events-none absolute inset-y-0 left-44 z-[5] w-10 bg-gradient-to-r from-brand-950 to-transparent sm:left-52" />
+
+      {/* o'ng tomon xiralashish */}
       <div className="pointer-events-none absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-brand-950 to-transparent" />
     </div>
   );

@@ -1,8 +1,6 @@
-"use client";
-
-import { useState } from "react";
 import { CheckCircle2, Send } from "lucide-react";
-import { useToast } from "./Sections";
+import { useState } from "react";
+import { useApp } from "../store";
 import { BayMark } from "./Brand";
 import Reveal from "./Reveal";
 
@@ -32,7 +30,7 @@ const SOCIALS = [
 ];
 
 export default function Footer() {
-  const toast = useToast();
+  const { toast } = useApp();
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
 
@@ -101,6 +99,7 @@ export default function Footer() {
               Tel: <a href="tel:+998957485995" className="text-sun hover:underline">+998 95 748 59 95</a>
             </p>
 
+            {/* Social channels badges */}
             <div className="mt-4 space-y-2">
               <a
                 href="https://instagram.com/baytrip.uz"

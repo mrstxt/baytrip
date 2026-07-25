@@ -1,16 +1,15 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { Menu, Phone, X } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { cn } from "../utils/cn";
 import { BayMark } from "./Brand";
 
 const LINKS = [
   { id: "turlar", label: "Turlar" },
   { id: "ichki-turizm", label: "Ichki turizm" },
-  { id: "obuna", label: "Obuna" },
-  { id: "analiz", label: "Tur analiz" },
+  { id: "tur-analizi", label: "Tur analiz" },
   { id: "haqimizda", label: "Biz haqimizda" },
+  { id: "fikrlar", label: "Mijozlar" },
+  { id: "savollar", label: "Savollar" },
   { id: "aloqa", label: "Aloqa" },
 ];
 
@@ -27,7 +26,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    const ids = ["home", "turlar", "ichki-turizm", "obuna", "analiz", "haqimizda", "fikrlar", "savollar", "aloqa"];
+    const ids = ["home", "turlar", "ichki-turizm", "tur-analizi", "haqimizda", "fikrlar", "savollar", "aloqa"];
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && setActive(e.target.id)),
       { rootMargin: "-40% 0px -55% 0px" }
@@ -47,10 +46,10 @@ export default function Navbar() {
   const onHero = !scrolled;
 
   return (
-    <header className="fixed inset-x-0 top-10 z-50 px-3 pt-2 sm:px-6 sm:pt-2.5">
+    <header className="fixed inset-x-0 top-10 z-50 px-4 pt-2 sm:px-6 sm:pt-2.5">
       <div
         className={cn(
-          "mx-auto flex max-w-5xl items-center gap-2 rounded-full px-3 py-2 transition-all duration-500 sm:px-4",
+          "mx-auto flex max-w-6xl items-center gap-1 rounded-full px-4 py-2.5 transition-all duration-500 sm:gap-2 sm:px-5",
           onHero
             ? "bg-white/10 text-white ring-1 ring-white/20 backdrop-blur-xl"
             : "bg-white/72 text-ink shadow-[0_8px_40px_-12px_rgba(0,0,0,0.18)] ring-1 ring-black/[0.06] backdrop-blur-2xl"
@@ -71,7 +70,7 @@ export default function Navbar() {
               key={l.id}
               onClick={() => go(l.id)}
               className={cn(
-                "rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
+                "rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors sm:px-4",
                 active === l.id
                   ? onHero
                     ? "bg-white/20 text-white"
