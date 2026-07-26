@@ -742,6 +742,93 @@ async function broadcastPromoMessage(message) {
   return { usernames, ...results };
 }
 
+function buildTestLead(type = "contact") {
+  const normalizedType = clean(type, "contact").replace(/^\/?testlead(@\w+)?\s*/i, "").trim() || "contact";
+  const leadType = Object.prototype.hasOwnProperty.call(LEAD_LABELS, normalizedType) ? normalizedType : "contact";
+
+  const base = {
+    type: leadType,
+    name: "Test Ariza",
+    phone: "+998 00 000 00 00",
+    telegramUsername: "",
+    source: "Bot test command",
+  };
+
+  if (leadType === "promo-subscribe") {
+    return {
+      type: "promo-subscribe",
+      telegramUsername: "baytrip_test",
+      source: "Bot test command",
+    };
+  }
+
+  if (leadType === "bayclub-card") {
+    return {
+      ...base,
+      type: "bayclub-card",
+      telegramUsername: "baytrip_test",
+      cardType: "Men",
+      plan: "3 oy",
+      price: "Test",
+    };
+  }
+
+  if (leadType === "external-tour" || leadType === "domestic-tour") {
+    return {
+      ...base,
+      type: leadType,
+      tourTitle: "Test tur",
+      tourCity: "Toshkent",
+      tourCountry: leadType === "external-tour" ? "Turkiya" : "O'zbekiston",
+      date: "Test sana",
+      people: 2,
+      price: "Test",
+      total: "Test",
+    };
+  }
+
+  return {
+    ...base,
+    type: "contact",
+    message: "Bu bot orqali yuborilgan test murojaat.",
+  };
+}
+
+async function runTestLead(token, chatId, type) {
+  const body = buildTestLead(type);
+  const profileDelivery = { enabled: false, sent: false };
+  const threadId = getTopicId(body.type);
+  const payload = {
+    chat_id: process.env.TELEGRAM_CHAT_ID,
+    text: buildMessage(body, profileDelivery),
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  };
+
+  if (threadId) {
+    payload.message_thread_id = threadId;
+  }
+
+  const delivery = await sendLeadToTelegram(token, payload);
+  if (!delivery.ok) {
+    await sendBotMessage(token, chatId, `Test ariza yuborilmadi: ${escapeHtml(delivery.error)}`);
+    return;
+  }
+
+  await sendBotMessage(
+    token,
+    chatId,
+    [
+      "<b>Test ariza yuborildi</b>",
+      `Turi: <code>${escapeHtml(body.type)}</code>`,
+      `Topic ID: <code>${escapeHtml(threadId || "asosiy guruh")}</code>`,
+      `Telegram message ID: <code>${escapeHtml(delivery.telegramMessageId || "-")}</code>`,
+      `Fallback main chat: <code>${escapeHtml(delivery.fallbackToMainChat ? "true" : "false")}</code>`,
+    ].join("\n"),
+    { reply_markup: buildAdminPanelKeyboard() }
+  );
+}
+
 async function handleBotUpdate(body, token) {
   if (body.callback_query) {
     const callback = body.callback_query;
@@ -945,6 +1032,17 @@ async function handleBotUpdate(body, token) {
 
   if (text.startsWith("/login")) {
     await sendLoginPrompt(token, chatId);
+    return { ok: true };
+  }
+
+  if (text.startsWith("/testlead")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      return { ok: true };
+    }
+
+    const type = text.replace(/^\/testlead(@\w+)?\s*/i, "").trim() || "contact";
+    await runTestLead(token, chatId, type);
     return { ok: true };
   }
 
