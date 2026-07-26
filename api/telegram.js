@@ -714,7 +714,7 @@ function buildGroupLeadGreeting(leadData, employeeName) {
 
 function buildSiteContactGreeting(leadData, employeeName) {
   const customerName = clean(leadData.sender, "mijoz").split(/\s+/)[0];
-  return `Assalomu aleykum, ${customerName}. BayTrip turizm kompaniyasi operatori ${employeeName} bo'laman. Sayt orqali murojaatingiz bo'yicha yozyotgan edim. Sizga yordam berish uchun yozdim.`;
+  return `Assalomu aleykum, ${customerName}. BayTrip turizm kompaniyasi operatori ${employeeName} bo'laman. Sayt orqali murojaatingiz bo'yicha yozyotgan edim. Sizga qanday yordam berolaman?`;
 }
 
 function buildApprovedLeadGreeting(leadData, employeeName) {
