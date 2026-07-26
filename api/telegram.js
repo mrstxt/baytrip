@@ -1200,7 +1200,14 @@ async function sendLeadToTelegram(token, payload) {
 
   const data = await response.json().catch(() => null);
   if (response.ok && data?.ok) {
-    return { ok: true, data, fallbackToMainChat: false };
+    return {
+      ok: true,
+      data,
+      fallbackToMainChat: false,
+      telegramMessageId: data.result?.message_id,
+      telegramChatId: data.result?.chat?.id,
+      telegramThreadId: data.result?.message_thread_id,
+    };
   }
 
   const description = data?.description || "Telegramga yuborib bo'lmadi.";
@@ -1241,7 +1248,15 @@ async function sendLeadToTelegram(token, payload) {
     };
   }
 
-  return { ok: true, data: fallbackData, fallbackToMainChat: true, originalError: description };
+  return {
+    ok: true,
+    data: fallbackData,
+    fallbackToMainChat: true,
+    originalError: description,
+    telegramMessageId: fallbackData.result?.message_id,
+    telegramChatId: fallbackData.result?.chat?.id,
+    telegramThreadId: fallbackData.result?.message_thread_id,
+  };
 }
 
 export default async function handler(req, res) {
@@ -1259,6 +1274,9 @@ export default async function handler(req, res) {
       webhook: "/api/telegram",
       hasBotToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
       hasChatId: Boolean(process.env.TELEGRAM_CHAT_ID),
+      chatIdPreview: process.env.TELEGRAM_CHAT_ID
+        ? `${String(process.env.TELEGRAM_CHAT_ID).slice(0, 5)}...${String(process.env.TELEGRAM_CHAT_ID).slice(-4)}`
+        : null,
       hasAdminSession: Boolean(getAdminProfileConfig()),
       topicIds,
     });
@@ -1344,6 +1362,9 @@ export default async function handler(req, res) {
       profileMessageSent: profileDelivery.sent,
       topicId: threadId,
       fallbackToMainChat: delivery.fallbackToMainChat,
+      telegramMessageId: delivery.telegramMessageId,
+      telegramChatId: delivery.telegramChatId,
+      telegramThreadId: delivery.telegramThreadId,
     });
   } catch (error) {
     console.error("lead request failed", {

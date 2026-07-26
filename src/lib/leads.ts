@@ -52,11 +52,27 @@ export async function sendLead(payload: LeadPayload) {
     body: JSON.stringify(payload),
   });
 
-  const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    error?: string;
+    topicId?: number;
+    fallbackToMainChat?: boolean;
+    telegramMessageId?: number;
+    telegramChatId?: number | string;
+    telegramThreadId?: number;
+  } | null;
 
   if (!response.ok || !data?.ok) {
     throw new Error(data?.error ?? "Arizani yuborib bo'lmadi.");
   }
+
+  console.info("BayTrip lead sent", {
+    topicId: data.topicId,
+    fallbackToMainChat: data.fallbackToMainChat,
+    telegramMessageId: data.telegramMessageId,
+    telegramChatId: data.telegramChatId,
+    telegramThreadId: data.telegramThreadId,
+  });
 
   return data;
 }

@@ -1,185 +1,182 @@
 # Baytrip
 
-Baytrip uchun React + Vite landing/app. Saytda tur paketlari, smart tur tavsiyasi, aloqa formasi va BayClub Card obuna bo'limi bor. Arizalar Vercel serverless endpoint orqali Telegram guruhidagi alohida topiclarga yuboriladi.
+Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari, ichki va tashqi turlar, smart tur tavsiyasi, bron qilish formasi, murojaat formasi, aksiyalar obunasi va BayClub Card bo'limi bor. Arizalar Vercel serverless endpoint orqali Telegram guruhidagi alohida topiclarga yuboriladi.
 
-## So'nggi o'zgarishlar
+## Asosiy imkoniyatlar
 
-BayClub Card bo'limi qo'shildi:
+- Tashqi tur paketlarini ko'rish va bron qilish.
+- Ichki tur paketlarini ko'rish va bron qilish.
+- Tur sanasini tanlash, odam sonini belgilash va taxminiy jami narxni ko'rish.
+- Sayt pastidagi oddiy murojaat formasi: ism va telefon yetarli, Telegram username ixtiyoriy.
+- Footer orqali aksiyalarga Telegram username bilan obuna bo'lish.
+- BayClub Card bo'limi: `Men`, `Women`, `Family` kartalari va `3 oy`, `6 oy`, `12 oy` tariflari.
+- Bot orqali BayClub narxlarini o'zgartirish.
+- Bot admin panel: login/parol orqali boshqarish.
+- Bot orqali aksiyalarni obunachilarga admin profilidan yuborish.
+- Telegram profil session orqali turizm guruhlarini scan qilish va kalit so'zlar asosida lidlarni ichki topicga tashlash.
+- Bot ichida `Oxirgi amallar` bo'limi: BayClub narx configlari, guruh lid sozlamalari va scan state yozuvlarini ko'rish.
 
-- `Sizga mos turni topamiz` bo'limidan keyin alohida BayClub section chiqadi.
-- 3 xil card dizayni bor:
-  - `Men` - qora premium style
-  - `Women` - qizil/orange style
-  - `Family` - BayTrip identikasiga mos ko'k/aqua/sariq style
-- Cardlarda `public/bayclub.png` logosi ishlatiladi.
-- Cardlarda chip, 16 xonali raqam, card holder, `Discount 20%` yozuvi bor.
-- Tariflar tartibi marketing asosida berilgan: `3 oy`, `12 oy`, `6 oy`.
-- `12 oy` tarif kartochkasi alohida ajratilgan va imkoniyatlari ko'proq.
-- Har bir tarifda hozirgi narx va ustidan chizilgan eski qimmatroq narx bor.
-- Har bir tarif tagida `Card olish` tugmasi bor.
-- `Card olish` bosilganda alohida modal ariza formasi ochiladi.
-- Modalda faqat card turi (`Men`, `Women`, `Family`) va arizachi ma'lumotlari so'raladi.
-- Qaysi tarif tugmasi bosilgan bo'lsa, shu tarif avtomatik arizaga qo'shiladi.
-- Modal `X` tugmasi bilan yopiladi.
-- Footer ichidagi aksiyalar obunasi emaildan Telegram username formasiga almashtirildi.
-- Aksiyalar obunasi `promo-subscribe` lead turi sifatida Telegram topicga yuboriladi.
+## Texnologiyalar
 
-Telegram ariza tizimiga yangi `BayClub Card obunasi` turi qo'shildi:
+- React
+- Vite
+- TypeScript
+- Tailwind CSS
+- Vercel Serverless Functions
+- Telegram Bot API
+- Telegram MTProto session (`telegram` npm package)
 
-- Frontend lead type: `bayclub-card`
-- Vercel env var: `TELEGRAM_BAYCLUB_TOPIC_ID`
-- Telegram topic tavsiya qilingan nomi: `BayClub Card obunasi`
+## Muhim fayllar
 
-Aksiyalar obunasi uchun:
+- `src/App.tsx` - asosiy sahifa layouti.
+- `src/components/Hero.tsx` - bosh sahifa hero qismi.
+- `src/components/Tours.tsx` - tashqi turlar.
+- `src/components/DomesticTours.tsx` - ichki turlar.
+- `src/components/TourModal.tsx` - tur bron qilish modali.
+- `src/components/TourAnalyzer.tsx` - smart tur tavsiya bo'limi.
+- `src/components/Sections.tsx` - aloqa/murojaat formasi, FAQ, kompaniya bo'limlari.
+- `src/components/BayClub.tsx` - BayClub Card UI va ariza formasi.
+- `src/components/Footer.tsx` - footer va aksiyalar obunasi.
+- `src/lib/leads.ts` - frontenddan `/api/telegram` ga ariza yuboruvchi helper.
+- `api/telegram.js` - asosiy Telegram webhook, ariza endpointi va bot admin panel.
+- `api/bayclub-config.js` - BayClub narxlarini Telegram config topicdan o'qiydigan endpoint.
+- `api/group-leads-scan.js` - Telegram profil session orqali guruhlardan lid scan qiladigan endpoint.
+- `scripts/create-telegram-session.mjs` - Telegram admin profil session olish scripti.
+- `vercel.json` - Vercel cron sozlamasi.
 
-- Frontend lead type: `promo-subscribe`
-- Vercel env var: `TELEGRAM_PROMO_TOPIC_ID`
-- Telegram topic tavsiya qilingan nomi: `Aksiyalar obunasi` yoki siz ochgan nom bilan `Aksiyasi obunasi`
-- Bot broadcast paroli: `TELEGRAM_BROADCAST_PASSWORD`
-- Bot admin login: `TELEGRAM_BOT_ADMIN_LOGIN`
-- Ixtiyoriy admin cheklovi: `TELEGRAM_BROADCAST_ADMIN_IDS`
+## Telegram topiclarga ariza yo'naltirish
 
-## Telegram arizalar tizimi
+Saytdan kelgan arizalar `POST /api/telegram` orqali Telegram guruhidagi topiclarga tushadi.
 
-So'rovlar `/api/telegram` Vercel serverless endpointi orqali yuboriladi. Bot token frontendga chiqmaydi.
-
-Yo'naltirish tartibi:
-
-- Tashqi tur paketlari: `TELEGRAM_EXTERNAL_TOPIC_ID`
-- Ichki tur paketlari va qo'shni davlat turlari: `TELEGRAM_DOMESTIC_TOPIC_ID`
-- BayClub Card obunasi: `TELEGRAM_BAYCLUB_TOPIC_ID`
+- Tashqi tur bronlari: `TELEGRAM_EXTERNAL_TOPIC_ID`
+- Ichki tur bronlari: `TELEGRAM_DOMESTIC_TOPIC_ID`
+- BayClub Card arizalari: `TELEGRAM_BAYCLUB_TOPIC_ID`
 - Aksiyalar obunasi: `TELEGRAM_PROMO_TOPIC_ID`
-- Boshqa murojaatlar: `TELEGRAM_CONTACT_TOPIC_ID`
+- Oddiy murojaatlar: `TELEGRAM_CONTACT_TOPIC_ID`
+- Guruhlardan topilgan lidlar: `TELEGRAM_GROUP_LEADS_TOPIC_ID`
 
-Telegram xabarida mijoz ismi, telefon raqami, Telegram username, ariza turi, tanlangan tur yoki BayClub ma'lumotlari, manba va admin profilidan yuboriladigan 1-xabar statusi ko'rsatiladi.
+Oddiy murojaatlar uchun alias env nomlar ham qo'llab-quvvatlanadi:
 
-Footer aksiyalar obunasida foydalanuvchi Telegram username qoldiradi. Telegram bot foydalanuvchiga lichkaga xabar yuborishi uchun foydalanuvchi avval botga `/start` bosgan bo'lishi kerak. Username qoldirish obunachi ro'yxatini yig'ish uchun ishlaydi; ommaviy broadcast qilish uchun alohida subscriber storage va bot broadcast endpoint kerak bo'ladi.
+```env
+TELEGRAM_CONTACT_TOPIC_ID=6
+TELEGRAM_SUPPORT_TOPIC_ID=6
+TELEGRAM_MUROJAAT_TOPIC_ID=6
+TELEGRAM_MUROJAATLAR_TOPIC_ID=6
+```
 
-Hozirgi broadcast ishlashi:
-
-- Saytdan username kiritilsa, ariza `Aksiyalar obunasi` topicga tushadi.
-- Admin botga `/start` bosadi va command yo'riqnomasini ko'radi.
-- Admin `/login` bosadi, bot login so'raydi, keyin parol so'raydi.
-- Panelda `Aksiya xabar yuborish` tugmasi chiqadi.
-- Panelda `BayClub narxlarini o'zgartirish` tugmasi chiqadi.
-- Panelda `Guruh lid sozlamalari` tugmasi chiqadi.
-- Panelda `Oxirgi amallar` tugmasi chiqadi.
-- Tugma bosilgandan keyin bot reply so'rovi chiqaradi.
-- Admin shu so'rovga reply qilib yozgan matn obunachilarga yuboriladi.
-- Xabarlar bot nomidan emas, `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan lichkaga yuboriladi.
-- Flow xotiraga bog'lanmagan: deploydan keyin ham reply qilingan xabar orqali broadcast aniqlanadi.
-- BayClub narxlari bot orqali Telegram config topicga yoziladi va sayt `/api/bayclub-config` orqali o'qiydi.
-- Guruh lid sozlamalari ham Telegram config topicga yoziladi, `/api/group-leads-scan` esa cron orqali guruhlarni tekshiradi.
-- `Oxirgi amallar` bo'limi BayClub narx configlari, guruh lid configlari va scan state yozuvlarini bot ichida ko'rsatadi.
-
-BayClub arizasida quyidagilar yuboriladi:
-
-- Mijoz ismi
-- Telefon raqami
-- Telegram username
-- Card turi: `Men`, `Women`, `Family`
-- Obuna muddati: `3 oy`, `12 oy`, `6 oy`
-- Narx
-- Chegirma: har bir tur paketiga `20%`
-- Manba: `BayClub Card bo'limi`
+Asosiy tavsiya: `TELEGRAM_CONTACT_TOPIC_ID` ishlating.
 
 ## Vercel env vars
 
-Vercel dashboardda `Project Settings -> Environment Variables` bo'limiga quyidagilarni qo'shing:
+Vercel dashboardda `Project Settings -> Environment Variables` bo'limiga quyidagilar qo'shiladi.
+
+Asosiy Telegram bot va guruh:
 
 ```env
 TELEGRAM_BOT_TOKEN=123456:ABC...
 TELEGRAM_CHAT_ID=-1001234567890
+```
+
+Ariza topiclari:
+
+```env
 TELEGRAM_EXTERNAL_TOPIC_ID=2
 TELEGRAM_DOMESTIC_TOPIC_ID=3
 TELEGRAM_BAYCLUB_TOPIC_ID=4
 TELEGRAM_PROMO_TOPIC_ID=5
 TELEGRAM_CONTACT_TOPIC_ID=6
+TELEGRAM_GROUP_LEADS_TOPIC_ID=7
+```
+
+Bot admin panel:
+
+```env
 TELEGRAM_BOT_ADMIN_LOGIN=admin
 TELEGRAM_BROADCAST_PASSWORD=strong-secret-password
 TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@adminusername
-TELEGRAM_PROMO_SCAN_LIMIT=500
-TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=4
-TELEGRAM_GROUP_LEADS_TOPIC_ID=7
-TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=7
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
-TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
-TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
-TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
-TELEGRAM_ADMIN_ACTIONS_LIMIT=8
-CRON_SECRET=strong-cron-secret
+```
+
+`TELEGRAM_BROADCAST_ADMIN_IDS` ixtiyoriy. Berilsa, faqat shu Telegram ID yoki username egalari admin action qila oladi.
+
+Admin profil session:
+
+```env
 TELEGRAM_API_ID=123456
 TELEGRAM_API_HASH=abcdef123456...
 TELEGRAM_ADMIN_SESSION=1AQA...
 ```
 
-BayClub uchun Vercelga qo'shiladigan env nomi:
+BayClub va guruh lid configlari uchun alohida admin log/sozlamalar topic tavsiya qilinadi:
 
 ```env
-TELEGRAM_BAYCLUB_TOPIC_ID=<BayClub topic message_thread_id>
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=8
+TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=8
 ```
 
-Aksiyalar obunasi uchun Vercelga qo'shiladigan env nomi:
+Qo'shimcha sozlamalar:
 
 ```env
-TELEGRAM_PROMO_TOPIC_ID=<Aksiyalar topic message_thread_id>
-```
-
-Bot orqali aksiyalarni tarqatish uchun Vercelga qo'shiladigan envlar:
-
-```env
-TELEGRAM_BOT_ADMIN_LOGIN=<admin login>
-TELEGRAM_BROADCAST_PASSWORD=<admin foydalanadigan maxfiy parol>
-TELEGRAM_BROADCAST_ADMIN_IDS=<ixtiyoriy: admin Telegram ID yoki username>
 TELEGRAM_PROMO_SCAN_LIMIT=500
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
+TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
+TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
+TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
+TELEGRAM_ADMIN_ACTIONS_LIMIT=8
+TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS=3500
 ```
 
-`TELEGRAM_BROADCAST_ADMIN_IDS` ixtiyoriy. Hozirgi panel login va parol orqali ishlaydi; bu env keyingi qo'shimcha himoya uchun qoldirilgan.
-
-```env
-TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@baytrip_admin
-```
-
-Env varlarni qo'shgandan keyin loyihani qayta deploy qiling.
+`CRON_SECRET` majburiy emas. Agar qo'yilsa, `/api/group-leads-scan` endpoint secret talab qiladi. Oddiy Vercel cron uchun qo'ymasdan ishlatish osonroq.
 
 ## Telegram bot sozlash
 
-1. Telegramda `@BotFather` orqali bot yarating va tokenni oling.
-2. Botni kerakli Telegram guruhiga qo'shing.
-3. Botga guruhda xabar yuborish huquqini bering. Odatda botni admin qilish eng oson yo'l.
-4. Guruhda Topics yoqilgan bo'lishi kerak.
-5. Beshta topic yarating:
+1. `@BotFather` orqali bot yarating.
+2. Tokenni `TELEGRAM_BOT_TOKEN` ga yozing.
+3. Botni admin guruhga qo'shing.
+4. Guruhda Topics yoqing.
+5. Topiclar yarating:
    - Tashqi tur
    - Ichki tur
-   - BayClub Card obunasi
-   - Aksiyalar obunasi yoki Aksiyasi obunasi
-   - Murojaat
-6. Har bir topic ichiga bitta test xabar yozing.
-7. Topic IDlarni olish uchun brauzer yoki terminalda Bot API `getUpdates` chaqiring:
+   - BayClub Card
+   - Aksiyalar obunasi
+   - Murojaatlar
+   - Guruh lidlari
+   - Sozlamalar yoki Admin log
+6. Har bir topic ichiga test xabar yozing.
+7. Topic IDlarni olish uchun:
 
 ```bash
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates"
 ```
 
-Javob ichida kerakli xabar uchun `message_thread_id` qiymatini toping. Shu raqam topic ID bo'ladi.
+Javob ichidagi `message_thread_id` topic ID bo'ladi. Guruh ID esa odatda `-100...` ko'rinishida `message.chat.id` ichida chiqadi.
 
-Guruh `chat_id` odatda `-100...` bilan boshlanadi. Uni ham `getUpdates` javobidagi `message.chat.id` dan oling.
+## Webhook ulash
 
-## Bot webhook va aksiyalar broadcast
-
-Bot commandlari ishlashi uchun Telegram webhook sayt endpointiga ulangan bo'lishi kerak:
+Deploydan keyin webhookni ulang:
 
 ```bash
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<VERCEL_DOMAIN>/api/telegram"
 ```
 
-Webhook ulanganini tekshirish:
+Webhook holatini tekshirish:
 
 ```bash
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
 ```
 
-Bot admin panel commandlari:
+`last_error_message` bo'sh bo'lsa webhook ishlayapti.
+
+API health tekshirish:
+
+```text
+https://<VERCEL_DOMAIN>/api/telegram
+```
+
+Bu endpoint `hasBotToken`, `hasChatId`, `hasAdminSession` va `topicIds` holatini ko'rsatadi.
+
+## Bot admin panel
+
+Bot commandlari:
 
 ```text
 /start
@@ -189,76 +186,115 @@ Bot admin panel commandlari:
 /promo PAROL xabar matni
 ```
 
-Oddiy panel flow:
+Admin panelga kirish:
 
 ```text
-/start
 /login
 ```
 
-Bot loginni so'raydi, keyin parolni so'raydi. Login/parol to'g'ri bo'lsa admin panel inline tugmalar bilan chiqadi:
+Bot avval login, keyin parol so'raydi. Login/parol to'g'ri bo'lsa inline panel chiqadi:
 
 ```text
 📣 Aksiya xabar yuborish
+💳 BayClub narxlarini o'zgartirish
+🔎 Guruh lid sozlamalari
+🧾 Oxirgi amallar
 🚪 Chiqish
 ```
 
-`Aksiya xabar yuborish` bosilgandan keyin bot reply prompt chiqaradi. Aksiya matnini aynan shu promptga reply qilib yuboring.
+## Saytdan keladigan arizalar
 
-Tezkor command varianti ham qolgan:
+Tur bron qilish formasi:
+
+- Ism
+- Telefon
+- Telegram username, ixtiyoriy
+- Tur nomi
+- Yo'nalish
+- Sana
+- Odam soni
+- Narx
+- Jami summa
+
+Oddiy murojaat formasi:
+
+- Ism
+- Telefon
+- Telegram username, ixtiyoriy
+- Qiziqayotgan tur yoki izoh, ixtiyoriy
+
+BayClub Card arizasi:
+
+- Ism
+- Telefon
+- Telegram username
+- Card turi: `Men`, `Women`, `Family`
+- Tarif: `3 oy`, `6 oy`, `12 oy`
+- Narx
+
+Footer aksiyalar obunasi:
+
+- Telegram username
+- Manba: footer aksiyalar obunasi
+
+## Admin profilidan birinchi xabar
+
+Ariza kelganda sistema mijozga admin Telegram profili nomidan birinchi xabar yuborishga urinadi. Bu bot nomidan emas, `TELEGRAM_ADMIN_SESSION` orqali ulangan profil nomidan ketadi.
+
+Agar session sozlanmagan yoki username kiritilmagan bo'lsa:
+
+- ariza baribir topicga tushadi;
+- xabarda profil yuborish statusi ko'rsatiladi.
+
+Session olish:
+
+```bash
+TELEGRAM_API_ID=123456 TELEGRAM_API_HASH=abcdef123456 npm run telegram:session
+```
+
+Script telefon raqam, Telegram kod va 2FA parolni so'raydi. Oxirida chiqqan `TELEGRAM_ADMIN_SESSION` qiymatini Vercel envga yozing.
+
+## BayClub narxlarini bot orqali o'zgartirish
+
+Admin panelda `BayClub narxlarini o'zgartirish` tugmasini bosing. Bot reply prompt beradi. Shu promptga quyidagi formatda reply qiling:
 
 ```text
-/promo myStrongPassword Bugun Dubai tur paketlariga maxsus chegirma! Batafsil: baytrip.uz
+3=1599000|1800000
+12=4499000|5299000
+6=2999000|3399000
 ```
 
-Broadcast qanday ishlaydi:
+Birinchi qiymat - hozirgi narx, ikkinchi qiymat - eski chizilgan narx.
 
-- Bot admin paneldagi tugma yoki `/promo` commandni qabul qiladi.
-- Login paroli `TELEGRAM_BROADCAST_PASSWORD` bilan solishtiriladi.
-- Agar `TELEGRAM_BROADCAST_ADMIN_IDS` berilgan bo'lsa, command yuborgan admin ID/username ham tekshiriladi.
-- API `TELEGRAM_PROMO_TOPIC_ID` topicidagi oxirgi xabarlarni o'qiydi.
-- Xabarlardan `@username` lar ajratib olinadi.
-- `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan har bir username lichkasiga promo xabar yuboriladi.
+Narx config `BAYCLUB_PRICE_CONFIG` marker bilan Telegram config topicga yoziladi. Sayt `GET /api/bayclub-config` orqali oxirgi configlarni o'qib narxlarni yangilaydi.
 
-Muhim: admin profil orqali xabar yuborish uchun `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_ADMIN_SESSION` envlari ishlashi kerak. Agar admin profil session ishlamasa, broadcast ham ishlamaydi.
+Muhim: texnik config xabarlar BayClub arizalari topicida ko'rinmasligi uchun alohida `Sozlamalar` topic ochib, shuni yozing:
 
-## Bot orqali BayClub narxlarini o'zgartirish
+```env
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=<Sozlamalar topic ID>
+```
 
-Admin panelda `BayClub narxlarini o'zgartirish` tugmasi bor. Tugma bosilganda bot reply prompt chiqaradi. Narxlarni shu promptga reply qilib yuboring.
+## Aksiyalar broadcast
 
-Format:
+Footerdan username qoldirganlar `TELEGRAM_PROMO_TOPIC_ID` topicga tushadi. Admin paneldan `Aksiya xabar yuborish` bosilganda bot aksiya matnini so'raydi.
+
+Broadcast ishlashi:
+
+1. Admin aksiya matnini reply qiladi.
+2. API promo topicdagi oxirgi xabarlardan `@username` larni yig'adi.
+3. `TELEGRAM_ADMIN_SESSION` orqali ulangan profil har bir usernamega lichkaga xabar yuboradi.
+
+Tezkor command:
 
 ```text
-3=299000|399000
-12=899000|1299000
-6=499000|699000
+/promo PAROL Bugun Dubai turlariga maxsus chegirma!
 ```
-
-Birinchi qiymat hozirgi narx, ikkinchi qiymat chizilgan eski narx.
-
-Bot bu configni Telegram guruhidagi config topicga yozadi. Sayt esa `GET /api/bayclub-config` orqali eng oxirgi configni o'qib, BayClub tarif narxlarini yangilaydi.
-
-Config topic env:
-
-```env
-TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=<config topic ID>
-```
-
-Agar `TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID` kiritilmasa, config `TELEGRAM_BAYCLUB_TOPIC_ID` topiciga yoziladi.
-
-BayClub arizalari topicida `BAYCLUB_PRICE_CONFIG` texnik xabarlari ko'rinmasligi uchun alohida `Sozlamalar` yoki `Admin log` topic ochib, uning ID sini quyidagiga yozish tavsiya qilinadi:
-
-```env
-TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=<Sozlamalar topic message_thread_id>
-```
-
-Admin paneldagi `Oxirgi amallar` tugmasi shu config topiclardan oxirgi yozuvlarni o'qib beradi.
 
 ## Guruhlardan lid yig'ish
 
-Admin panelda `Guruh lid sozlamalari` tugmasi bor. Tugma bosilganda bot reply prompt chiqaradi. Kuzatiladigan guruhlar va kalit so'zlarni shu promptga reply qilib yuboring.
+Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Xabar ichida belgilangan kalit so'z topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
-Format:
+Admin panelda `Guruh lid sozlamalari` tugmasini bosing va quyidagi formatda reply qiling:
 
 ```text
 Guruhlar:
@@ -269,99 +305,45 @@ Kalit so'zlar:
 tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi
 ```
 
-Guruh chap tomonda Telegram public username yoki `-100...` ID bo'ladi. `=` dan keyingi qism ichki lid xabarida ko'rinadigan nom. Admin profil session o'sha guruhlarga kirgan bo'lishi kerak.
+Guruh chap tomonda public username yoki `-100...` ID bo'ladi. `=` dan keyingi qism ichki lid xabarida ko'rinadigan nom.
 
-Lidlar tushadigan topic env:
-
-```env
-TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlar topic message_thread_id>
-```
-
-Config va scan state saqlanadigan topic env:
+Lidlar tushadigan topic:
 
 ```env
-TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<config topic message_thread_id>
+TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlari topic ID>
 ```
 
-Agar `TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID` kiritilmasa, config `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga yoziladi. Scan state ham shu topicga `GROUP_LEADS_STATE` marker bilan yoziladi, shuning uchun serverless deploydan keyin ham duplicate lidlar kamayadi.
+Config va scan state topic:
 
-Vercel cron endpoint:
+```env
+TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<Sozlamalar topic ID>
+```
+
+Vercel cron:
 
 ```text
 /api/group-leads-scan
 ```
 
-`vercel.json` cronni har daqiqada ishga tushiradi. Himoya uchun Vercel envga quyidagini qo'shing:
+`vercel.json` cronni har daqiqada ishga tushiradi.
 
-```env
-CRON_SECRET=<maxfiy cron token>
-```
+Birinchi scan eski tarixni lid qilib yubormaydi. Faqat oxirgi xabar ID sini state qilib saqlaydi va keyingi xabarlardan boshlaydi.
 
-Manual test uchun:
-
-```bash
-curl "https://<VERCEL_DOMAIN>/api/group-leads-scan?secret=<CRON_SECRET>"
-```
-
-Qo'shimcha sozlamalar:
-
-```env
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
-TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
-TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
-```
-
-`TELEGRAM_GROUP_LEADS_SCAN_LIMIT` har bir guruhdan bitta cron paytida nechta yangi xabar tekshirilishini belgilaydi. Kalit so'zlardan biri xabar matnida topilsa, bot ichki guruhdagi lid topicga xabar tashlaydi.
-
-Birinchi scan eski tarixni lid qilib yubormaydi, faqat eng oxirgi xabar ID sini state sifatida saqlab, keyingi xabarlardan boshlaydi. Agar config qo'shilgandan keyin oxirgi tarixni ham tekshirtirmoqchi bo'lsangiz:
+Eski tarixni ham scan qilish kerak bo'lsa:
 
 ```env
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=true
 ```
 
-## Admin profilidan 1-xabar yuborish
+## Oxirgi amallar
 
-Mijozga birinchi xabar bot nomidan emas, admin Telegram profili nomidan ketishi uchun MTProto user session kerak bo'ladi. Buning uchun quyidagi env varlar sozlanadi:
+Admin paneldagi `Oxirgi amallar` tugmasi quyidagilarni ko'rsatadi:
 
-```env
-TELEGRAM_API_ID=123456
-TELEGRAM_API_HASH=abcdef123456...
-TELEGRAM_ADMIN_SESSION=1AQA...
-```
+- BayClub narx configlari.
+- Guruh lid sozlamalari.
+- Guruh lid scan state yozuvlari.
 
-`TELEGRAM_ADMIN_SESSION` admin profilining session stringi bo'ladi. Bu maxfiy qiymat: uni repo ichiga yozmang, faqat Vercel env vars ichida saqlang. Agar bu uchta env var kiritilmasa, ariza baribir guruhga tushadi, lekin mijozga admin profilidan avtomatik xabar yuborilmaydi.
-
-Session olish uchun lokal terminalda:
-
-```bash
-TELEGRAM_API_ID=123456 TELEGRAM_API_HASH=abcdef123456 npm run telegram:session
-```
-
-Script admin telefon raqami, Telegramdan kelgan kod va 2FA parolni so'raydi. Oxirida chiqqan `TELEGRAM_ADMIN_SESSION` qiymatini Vercel env vars ichiga kiriting.
-
-## BayClub Card UI
-
-BayClub komponenti:
-
-```text
-src/components/BayClub.tsx
-```
-
-Asosiy ishlashi:
-
-- Card dizaynlari `cardDesigns` massivida turadi.
-- Tariflar `plans` massivida turadi.
-- `Card olish` tugmasi bosilganda modal ochiladi.
-- Modal formasi `sendLead` orqali `/api/telegram` endpointga `bayclub-card` payload yuboradi.
-- Yuborilgan payload `api/telegram.js` ichida validatsiya qilinadi va `TELEGRAM_BAYCLUB_TOPIC_ID` topicga jo'natiladi.
-
-Logo:
-
-```text
-public/bayclub.png
-```
-
-BayClub cardlaridagi logo shu fayldan olinadi. Fayl almashtirilsa, sayt avtomatik yangi logoni ishlatadi.
+Bu bo'lim Telegram config topiclarni admin profil session orqali o'qiydi.
 
 ## Ishga tushirish
 
@@ -371,13 +353,13 @@ Dependencylarni o'rnatish:
 npm install
 ```
 
-Frontend development server:
+Development server:
 
 ```bash
 npm run dev
 ```
 
-Vercel API endpointini lokal tekshirish uchun Vercel CLI bilan ishga tushiring:
+Vercel API endpointlarini lokal tekshirish:
 
 ```bash
 vercel dev
@@ -395,16 +377,51 @@ TypeScript tekshiruv:
 npx tsc --noEmit
 ```
 
-## Muhim fayllar
+## Deploy
 
-- `src/components/Hero.tsx` - bosh sahifa hero qismi
-- `src/components/BayClub.tsx` - BayClub Card dizaynlari, tariflar va ariza modali
-- `src/components/TourModal.tsx` - tur paket ariza formasi
-- `src/components/TourAnalyzer.tsx` - smart tur tavsiya bo'limi
-- `src/components/Sections.tsx` - aloqa/murojaat formasi
-- `src/lib/leads.ts` - frontenddan `/api/telegram` ga yuboruvchi helper va lead payload typelari
-- `api/telegram.js` - Telegram Bot API bilan ishlaydigan Vercel serverless endpoint
-- `api/group-leads-scan.js` - Telegram profil session orqali guruhlarni scan qilib lid topuvchi cron endpoint
-- `vercel.json` - Vercel cron sozlamasi
-- `public/bayclub.png` - BayClub logosi
-- `public/logo.png` - BayTrip logosi
+1. Env varlarni Vercelga kiriting.
+2. Kodni deploy qiling.
+3. Webhookni qayta ulang.
+4. `https://<VERCEL_DOMAIN>/api/telegram` orqali health tekshiring.
+5. Botda `/start` va `/login` ni tekshiring.
+6. Saytdan test ariza yuboring.
+
+## Troubleshooting
+
+Bot `/start` ga javob bermasa:
+
+- Webhook ulanganini tekshiring:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
+```
+
+- `last_error_message` ni ko'ring.
+- `https://<VERCEL_DOMAIN>/api/telegram` health endpointini oching.
+- `hasBotToken` va `hasChatId` true bo'lishi kerak.
+
+Murojaatlar topicga tushmasa:
+
+- `TELEGRAM_CONTACT_TOPIC_ID` to'g'ri topic ID ekanini tekshiring.
+- `GET /api/telegram` javobida `topicIds.contact` qiymatini ko'ring.
+- Topic ID noto'g'ri bo'lsa, ariza asosiy guruhga ogohlantirish bilan tushadi.
+
+BayClub narxlari defaultga qaytsa:
+
+- `TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID` to'g'ri topicga ulanganini tekshiring.
+- Bot orqali narxlarni bir marta to'liq yuboring:
+
+```text
+3=1599000|1800000
+12=4499000|5299000
+6=2999000|3399000
+```
+
+`zsh: no matches found` chiqsa:
+
+- `curl` URLni qo'shtirnoq ichida yozing:
+
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://domain.vercel.app/api/telegram"
+```
+
