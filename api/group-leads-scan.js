@@ -1,0 +1,311 @@
+const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
+const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function clean(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function getAdminProfileConfig() {
+  const apiId = Number(process.env.TELEGRAM_API_ID);
+  const apiHash = clean(process.env.TELEGRAM_API_HASH);
+  const session = clean(process.env.TELEGRAM_ADMIN_SESSION);
+
+  if (!Number.isFinite(apiId) || !apiHash || !session) {
+    return null;
+  }
+
+  return { apiId, apiHash, session };
+}
+
+function getTopicNumber(...values) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function getConfigTopicId() {
+  return getTopicNumber(
+    process.env.TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID,
+    process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
+    process.env.TELEGRAM_CONTACT_TOPIC_ID
+  );
+}
+
+function getLeadTopicId() {
+  return getTopicNumber(
+    process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
+    process.env.TELEGRAM_CONTACT_TOPIC_ID
+  );
+}
+
+async function sendBotMessage(token, chatId, text, extra = {}) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...extra,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.description || "Telegramga xabar yuborilmadi.");
+  }
+  return data;
+}
+
+async function withAdminClient(fn) {
+  const config = getAdminProfileConfig();
+  if (!config) {
+    throw new Error("Admin profil seansi sozlanmagan.");
+  }
+
+  const [{ TelegramClient }, { StringSession }] = await Promise.all([
+    import("telegram"),
+    import("telegram/sessions/index.js"),
+  ]);
+
+  const client = new TelegramClient(new StringSession(config.session), config.apiId, config.apiHash, {
+    connectionRetries: 2,
+  });
+
+  try {
+    await client.connect();
+    return await fn(client);
+  } finally {
+    await client.disconnect().catch(() => {});
+  }
+}
+
+function parseMarkerJson(text, marker) {
+  const raw = String(text ?? "");
+  if (!raw.includes(marker)) return null;
+  const jsonStart = raw.indexOf("{");
+  const jsonEnd = raw.lastIndexOf("}");
+  if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
+  return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+}
+
+async function readLatestMarker(client, marker) {
+  const topicId = getConfigTopicId();
+  if (!topicId) return null;
+
+  const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+  const iterator = client.iterMessages(entity, {
+    limit: Number(process.env.TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT || 150),
+    replyTo: topicId,
+  });
+
+  for await (const message of iterator) {
+    const parsed = parseMarkerJson(message.message, marker);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
+function normalizeText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/ʻ|ʼ|`/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findMatchedKeywords(message, keywords) {
+  const normalized = normalizeText(message);
+  return keywords.filter((keyword) => normalized.includes(normalizeText(keyword)));
+}
+
+function getSenderLabel(message) {
+  const sender = message.sender;
+  if (!sender) return "Noma'lum";
+
+  const first = clean(sender.firstName);
+  const last = clean(sender.lastName);
+  const title = clean(sender.title);
+  const username = clean(sender.username);
+  const name = clean([first, last].filter(Boolean).join(" "), title || "Noma'lum");
+
+  return username ? `${name} (@${username})` : name;
+}
+
+function getMessageLink(groupId, messageId) {
+  const value = String(groupId ?? "");
+  if (value.startsWith("@")) return `https://t.me/${value.slice(1)}/${messageId}`;
+  const channelId = value.startsWith("-100") ? value.slice(4) : "";
+  return channelId ? `https://t.me/c/${channelId}/${messageId}` : "";
+}
+
+function getEntityInput(groupId) {
+  const value = clean(groupId);
+  return /^-?\d+$/.test(value) ? Number(value) : value;
+}
+
+function formatDate(date) {
+  return new Intl.DateTimeFormat("uz-UZ", {
+    timeZone: "Asia/Tashkent",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date instanceof Date ? date : new Date());
+}
+
+function buildLeadText({ group, message, matchedKeywords }) {
+  const link = getMessageLink(group.id, message.id);
+  const sender = getSenderLabel(message);
+  const lines = [
+    "<b>🔎 Guruhdan yangi lid</b>",
+    "",
+    `💬 <b>Xabar:</b> ${escapeHtml(clean(message.message))}`,
+    "",
+    `👤 <b>Kim yozdi:</b> ${escapeHtml(sender)}`,
+    `👥 <b>Qaysi guruh:</b> ${escapeHtml(clean(group.title, group.id))}`,
+    `🏷 <b>Kalit so'z:</b> ${escapeHtml(matchedKeywords.join(", "))}`,
+    `🕒 <b>Vaqt:</b> ${escapeHtml(formatDate(message.date))}`,
+  ];
+
+  if (link) {
+    lines.push(`🔗 <b>Asl xabar:</b> ${escapeHtml(link)}`);
+  }
+
+  return lines.join("\n");
+}
+
+async function saveState(token, state) {
+  const chatId = clean(process.env.TELEGRAM_CHAT_ID);
+  const topicId = getConfigTopicId();
+  const text = [
+    `<b>${GROUP_LEADS_STATE_MARKER}</b>`,
+    "",
+    `<code>${escapeHtml(JSON.stringify(state))}</code>`,
+  ].join("\n");
+
+  await sendBotMessage(token, chatId, text, topicId ? { message_thread_id: topicId } : {});
+}
+
+function isAuthorized(req) {
+  const secret = clean(process.env.CRON_SECRET || process.env.TELEGRAM_GROUP_LEADS_CRON_SECRET);
+  if (!secret) return true;
+
+  const header = clean(req.headers.authorization);
+  const querySecret = clean(req.query?.secret);
+  return header === `Bearer ${secret}` || querySecret === secret;
+}
+
+async function scanGroup(client, group, config, state) {
+  const entity = await client.getEntity(getEntityInput(group.id));
+  const lastId = Number(state[group.id] || 0);
+  const limit = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 40);
+  const found = [];
+  let newestId = lastId;
+
+  if (!lastId && process.env.TELEGRAM_GROUP_LEADS_SCAN_HISTORY !== "true") {
+    const latest = await client.getMessages(entity, { limit: 1 });
+    const latestMessage = Array.isArray(latest) ? latest[0] : latest?.[0];
+    return { found, newestId: latestMessage?.id || 0 };
+  }
+
+  const iterator = client.iterMessages(entity, {
+    limit: Number.isFinite(limit) ? limit : 40,
+    minId: Number.isFinite(lastId) ? lastId : 0,
+  });
+
+  const messages = [];
+  for await (const message of iterator) {
+    messages.push(message);
+  }
+
+  for (const message of messages.reverse()) {
+    if (!message?.id) continue;
+    newestId = Math.max(newestId, message.id);
+
+    const text = clean(message.message);
+    if (!text) continue;
+
+    const matchedKeywords = findMatchedKeywords(text, config.keywords);
+    if (matchedKeywords.length === 0) continue;
+
+    found.push({ group, message, matchedKeywords });
+  }
+
+  return { found, newestId };
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "GET" && req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ ok: false, error: "Faqat GET yoki POST so'rov qabul qilinadi." });
+  }
+
+  if (!isAuthorized(req)) {
+    return res.status(401).json({ ok: false, error: "Cron secret noto'g'ri." });
+  }
+
+  const token = clean(process.env.TELEGRAM_BOT_TOKEN);
+  const chatId = clean(process.env.TELEGRAM_CHAT_ID);
+  if (!token || !chatId) {
+    return res.status(500).json({ ok: false, error: "Telegram bot sozlamalari kiritilmagan." });
+  }
+
+  try {
+    const result = await withAdminClient(async (client) => {
+      const config = await readLatestMarker(client, GROUP_LEADS_CONFIG_MARKER);
+      if (!config?.enabled || !Array.isArray(config.groups) || !Array.isArray(config.keywords)) {
+        return { scanned: 0, sent: 0, skipped: "config_missing" };
+      }
+
+      const state = (await readLatestMarker(client, GROUP_LEADS_STATE_MARKER)) || {};
+      const nextState = { ...state };
+      const leadTopicId = getLeadTopicId();
+      let sent = 0;
+      const errors = [];
+
+      for (const group of config.groups) {
+        try {
+          const scan = await scanGroup(client, group, config, state);
+          nextState[group.id] = scan.newestId;
+
+          for (const lead of scan.found) {
+            await sendBotMessage(
+              token,
+              chatId,
+              buildLeadText(lead),
+              leadTopicId ? { message_thread_id: leadTopicId } : {}
+            );
+            sent += 1;
+          }
+        } catch (error) {
+          errors.push({
+            group: group.id,
+            error: error instanceof Error ? error.message : "noma'lum xatolik",
+          });
+        }
+      }
+
+      await saveState(token, nextState);
+      return { scanned: config.groups.length, sent, errors };
+    });
+
+    return res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Guruh lid scan ishlamadi.",
+    });
+  }
+}

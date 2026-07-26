@@ -62,11 +62,15 @@ Hozirgi broadcast ishlashi:
 - Admin `/login` bosadi, bot login so'raydi, keyin parol so'raydi.
 - Panelda `Aksiya xabar yuborish` tugmasi chiqadi.
 - Panelda `BayClub narxlarini o'zgartirish` tugmasi chiqadi.
+- Panelda `Guruh lid sozlamalari` tugmasi chiqadi.
+- Panelda `Oxirgi amallar` tugmasi chiqadi.
 - Tugma bosilgandan keyin bot reply so'rovi chiqaradi.
 - Admin shu so'rovga reply qilib yozgan matn obunachilarga yuboriladi.
 - Xabarlar bot nomidan emas, `TELEGRAM_ADMIN_SESSION` orqali ulangan admin profilidan lichkaga yuboriladi.
 - Flow xotiraga bog'lanmagan: deploydan keyin ham reply qilingan xabar orqali broadcast aniqlanadi.
 - BayClub narxlari bot orqali Telegram config topicga yoziladi va sayt `/api/bayclub-config` orqali o'qiydi.
+- Guruh lid sozlamalari ham Telegram config topicga yoziladi, `/api/group-leads-scan` esa cron orqali guruhlarni tekshiradi.
+- `Oxirgi amallar` bo'limi BayClub narx configlari, guruh lid configlari va scan state yozuvlarini bot ichida ko'rsatadi.
 
 BayClub arizasida quyidagilar yuboriladi:
 
@@ -96,6 +100,14 @@ TELEGRAM_BROADCAST_PASSWORD=strong-secret-password
 TELEGRAM_BROADCAST_ADMIN_IDS=123456789,@adminusername
 TELEGRAM_PROMO_SCAN_LIMIT=500
 TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=4
+TELEGRAM_GROUP_LEADS_TOPIC_ID=7
+TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=7
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
+TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
+TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
+TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
+TELEGRAM_ADMIN_ACTIONS_LIMIT=8
+CRON_SECRET=strong-cron-secret
 TELEGRAM_API_ID=123456
 TELEGRAM_API_HASH=abcdef123456...
 TELEGRAM_ADMIN_SESSION=1AQA...
@@ -234,6 +246,79 @@ TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=<config topic ID>
 
 Agar `TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID` kiritilmasa, config `TELEGRAM_BAYCLUB_TOPIC_ID` topiciga yoziladi.
 
+BayClub arizalari topicida `BAYCLUB_PRICE_CONFIG` texnik xabarlari ko'rinmasligi uchun alohida `Sozlamalar` yoki `Admin log` topic ochib, uning ID sini quyidagiga yozish tavsiya qilinadi:
+
+```env
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=<Sozlamalar topic message_thread_id>
+```
+
+Admin paneldagi `Oxirgi amallar` tugmasi shu config topiclardan oxirgi yozuvlarni o'qib beradi.
+
+## Guruhlardan lid yig'ish
+
+Admin panelda `Guruh lid sozlamalari` tugmasi bor. Tugma bosilganda bot reply prompt chiqaradi. Kuzatiladigan guruhlar va kalit so'zlarni shu promptga reply qilib yuboring.
+
+Format:
+
+```text
+Guruhlar:
+@fargonaturizm=Farg'ona turizm
+-1001234567890=Samarqand sayohat
+
+Kalit so'zlar:
+tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi
+```
+
+Guruh chap tomonda Telegram public username yoki `-100...` ID bo'ladi. `=` dan keyingi qism ichki lid xabarida ko'rinadigan nom. Admin profil session o'sha guruhlarga kirgan bo'lishi kerak.
+
+Lidlar tushadigan topic env:
+
+```env
+TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlar topic message_thread_id>
+```
+
+Config va scan state saqlanadigan topic env:
+
+```env
+TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<config topic message_thread_id>
+```
+
+Agar `TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID` kiritilmasa, config `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga yoziladi. Scan state ham shu topicga `GROUP_LEADS_STATE` marker bilan yoziladi, shuning uchun serverless deploydan keyin ham duplicate lidlar kamayadi.
+
+Vercel cron endpoint:
+
+```text
+/api/group-leads-scan
+```
+
+`vercel.json` cronni har daqiqada ishga tushiradi. Himoya uchun Vercel envga quyidagini qo'shing:
+
+```env
+CRON_SECRET=<maxfiy cron token>
+```
+
+Manual test uchun:
+
+```bash
+curl "https://<VERCEL_DOMAIN>/api/group-leads-scan?secret=<CRON_SECRET>"
+```
+
+Qo'shimcha sozlamalar:
+
+```env
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
+TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
+TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
+```
+
+`TELEGRAM_GROUP_LEADS_SCAN_LIMIT` har bir guruhdan bitta cron paytida nechta yangi xabar tekshirilishini belgilaydi. Kalit so'zlardan biri xabar matnida topilsa, bot ichki guruhdagi lid topicga xabar tashlaydi.
+
+Birinchi scan eski tarixni lid qilib yubormaydi, faqat eng oxirgi xabar ID sini state sifatida saqlab, keyingi xabarlardan boshlaydi. Agar config qo'shilgandan keyin oxirgi tarixni ham tekshirtirmoqchi bo'lsangiz:
+
+```env
+TELEGRAM_GROUP_LEADS_SCAN_HISTORY=true
+```
+
 ## Admin profilidan 1-xabar yuborish
 
 Mijozga birinchi xabar bot nomidan emas, admin Telegram profili nomidan ketishi uchun MTProto user session kerak bo'ladi. Buning uchun quyidagi env varlar sozlanadi:
@@ -319,5 +404,7 @@ npx tsc --noEmit
 - `src/components/Sections.tsx` - aloqa/murojaat formasi
 - `src/lib/leads.ts` - frontenddan `/api/telegram` ga yuboruvchi helper va lead payload typelari
 - `api/telegram.js` - Telegram Bot API bilan ishlaydigan Vercel serverless endpoint
+- `api/group-leads-scan.js` - Telegram profil session orqali guruhlarni scan qilib lid topuvchi cron endpoint
+- `vercel.json` - Vercel cron sozlamasi
 - `public/bayclub.png` - BayClub logosi
 - `public/logo.png` - BayTrip logosi
