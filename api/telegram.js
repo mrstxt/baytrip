@@ -99,6 +99,20 @@ function isAllowedAdmin(message) {
   return allowed.includes(id) || allowedUsernames.includes(username.toLowerCase());
 }
 
+function buildAdminDeniedText(message) {
+  const from = message?.from;
+  const id = from?.id ? String(from.id) : "topilmadi";
+  const username = normalizeTelegramUsername(from?.username);
+
+  return [
+    "Bu admin uchun ruxsat berilmagan.",
+    "",
+    "Vercel env ichidagi <code>TELEGRAM_BROADCAST_ADMIN_IDS</code> ga quyidagilardan birini qo'shing:",
+    `ID: <code>${escapeHtml(id)}</code>`,
+    username ? `Username: <code>@${escapeHtml(username)}</code>` : "Username: <code>topilmadi</code>",
+  ].join("\n");
+}
+
 async function sendBotMessage(token, chatId, text, extra = {}) {
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
@@ -838,6 +852,7 @@ async function handleBotUpdate(body, token) {
     if (!chatId) return { ok: true, ignored: true };
     if (data !== "login_start" && !isAllowedAdmin(callback)) {
       await answerCallbackQuery(token, callback.id, "Bu amal uchun ruxsat yo'q.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(callback));
       return { ok: true, ignored: true };
     }
     await answerCallbackQuery(token, callback.id);
@@ -973,7 +988,7 @@ async function handleBotUpdate(body, token) {
     if (!getBroadcastPassword()) {
       await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
     } else if (!isAllowedAdmin(message)) {
-      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
     } else if (login === getAdminLogin() && password === getBroadcastPassword()) {
       await sendAdminPanel(token, chatId);
     } else {
@@ -984,7 +999,7 @@ async function handleBotUpdate(body, token) {
 
   if (replyText.includes(PROMO_REPLY_MARKER) && !text.startsWith("/")) {
     if (!isAllowedAdmin(message)) {
-      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
       return { ok: true };
     }
     await runPromoBroadcast(token, chatId, text);
@@ -993,7 +1008,7 @@ async function handleBotUpdate(body, token) {
 
   if (replyText.includes(PRICE_REPLY_MARKER) && !text.startsWith("/")) {
     if (!isAllowedAdmin(message)) {
-      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
       return { ok: true };
     }
     await runBayClubPriceUpdate(token, chatId, text);
@@ -1002,7 +1017,7 @@ async function handleBotUpdate(body, token) {
 
   if (replyText.includes(GROUP_LEADS_REPLY_MARKER) && !text.startsWith("/")) {
     if (!isAllowedAdmin(message)) {
-      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
       return { ok: true };
     }
     await runGroupLeadsConfigUpdate(token, chatId, text);
@@ -1037,7 +1052,7 @@ async function handleBotUpdate(body, token) {
 
   if (text.startsWith("/testlead")) {
     if (!isAllowedAdmin(message)) {
-      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
       return { ok: true };
     }
 
@@ -1062,7 +1077,7 @@ async function handleBotUpdate(body, token) {
     const promoMessage = messageParts.join(" ").trim();
 
     if (!isAllowedAdmin(message)) {
-      await sendBotMessage(token, chatId, "Bu admin uchun ruxsat berilmagan.");
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
       return { ok: true };
     }
     if (!getBroadcastPassword()) {
