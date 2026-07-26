@@ -1,6 +1,5 @@
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
-const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -150,10 +149,6 @@ function getSenderLabel(message) {
   return username ? `${name} (@${username})` : name;
 }
 
-function getSenderUsername(message) {
-  return clean(message.sender?.username);
-}
-
 function getMessageLink(groupId, messageId) {
   const value = String(groupId ?? "");
   if (value.startsWith("@")) return `https://t.me/${value.slice(1)}/${messageId}`;
@@ -177,16 +172,6 @@ function formatDate(date) {
 function buildLeadText({ group, message, matchedKeywords }) {
   const link = getMessageLink(group.id, message.id);
   const sender = getSenderLabel(message);
-  const leadData = {
-    username: getSenderUsername(message),
-    sender,
-    groupId: group.id,
-    groupTitle: clean(group.title, group.id),
-    messageId: message.id,
-    message: clean(message.message),
-    matchedKeywords,
-    link,
-  };
   const lines = [
     "<b>🔎 Guruhdan yangi lid</b>",
     "",
@@ -201,8 +186,6 @@ function buildLeadText({ group, message, matchedKeywords }) {
   if (link) {
     lines.push(`🔗 <b>Asl xabar:</b> ${escapeHtml(link)}`);
   }
-
-  lines.push("", `<code>${GROUP_LEAD_DATA_MARKER} ${escapeHtml(JSON.stringify(leadData))}</code>`);
 
   return lines.join("\n");
 }

@@ -615,6 +615,7 @@ async function getGroupLeadEmployeeByCallback(callback, data) {
 }
 
 function extractApprovalLeadData(text) {
+  const rawText = String(text ?? "");
   const siteLead = parseMarkerJson(text, SITE_LEAD_DATA_MARKER);
   if (siteLead && typeof siteLead === "object") {
     return {
@@ -628,16 +629,53 @@ function extractApprovalLeadData(text) {
   }
 
   const parsed = parseMarkerJson(text, GROUP_LEAD_DATA_MARKER);
-  if (!parsed || typeof parsed !== "object") return null;
-  return {
-    source: "group-lead",
-    username: normalizeTelegramUsername(parsed.username),
-    sender: clean(parsed.sender, "Mijoz"),
-    groupTitle: clean(parsed.groupTitle, "Telegram guruh"),
-    message: clean(parsed.message, ""),
-    matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
-    link: clean(parsed.link, ""),
-  };
+  if (parsed && typeof parsed === "object") {
+    return {
+      source: "group-lead",
+      username: normalizeTelegramUsername(parsed.username),
+      sender: clean(parsed.sender, "Mijoz"),
+      groupTitle: clean(parsed.groupTitle, "Telegram guruh"),
+      message: clean(parsed.message, ""),
+      matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
+      link: clean(parsed.link, ""),
+    };
+  }
+
+  const username = normalizeTelegramUsername(rawText.match(/@([a-zA-Z0-9_]{5,32})/)?.[1]);
+  const messageText = extractLeadLineValue(rawText, "Xabar");
+
+  if (rawText.includes("Guruhdan yangi lid") || rawText.includes("Kim yozdi:")) {
+    return {
+      source: "group-lead",
+      username,
+      sender: clean(extractLeadLineValue(rawText, "Kim yozdi"), "Mijoz"),
+      groupTitle: clean(extractLeadLineValue(rawText, "Qaysi guruh"), "Telegram guruh"),
+      message: messageText,
+      matchedKeywords: parseListValue(extractLeadLineValue(rawText, "Kalit so'z")),
+      link: clean(extractLeadLineValue(rawText, "Asl xabar"), ""),
+    };
+  }
+
+  if (rawText.includes("Mijoz:") || rawText.includes("Telefon:")) {
+    return {
+      source: "site-contact",
+      username,
+      sender: clean(extractLeadLineValue(rawText, "Mijoz"), "Mijoz"),
+      message: messageText,
+      matchedKeywords: [],
+      link: "",
+    };
+  }
+
+  return null;
+}
+
+function extractLeadLineValue(text, label) {
+  const line = String(text ?? "")
+    .split("\n")
+    .find((item) => item.includes(`${label}:`));
+  if (!line) return "";
+  return clean(line.slice(line.indexOf(`${label}:`) + label.length + 1), "");
 }
 
 function stripLeadDataMarkers(text) {
@@ -1891,17 +1929,6 @@ function buildMessage(body, profileDelivery) {
     `🔎 <b>Manba:</b> ${escapeHtml(source)}`,
     `🕒 <b>Vaqt:</b> ${escapeHtml(createdAt)}`
   );
-
-  if (body.type === "contact") {
-    const siteLeadData = {
-      username: normalizeTelegramUsername(body.telegramUsername),
-      sender: clean(body.name, "Mijoz"),
-      phone: clean(body.phone, ""),
-      message: clean(body.message, ""),
-      source,
-    };
-    lines.push("", `<code>${SITE_LEAD_DATA_MARKER} ${escapeHtml(JSON.stringify(siteLeadData))}</code>`);
-  }
 
   return lines.join("\n");
 }
