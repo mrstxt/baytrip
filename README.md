@@ -125,7 +125,7 @@ TELEGRAM_ADMIN_ACTIONS_LIMIT=8
 TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS=3500
 ```
 
-`CRON_SECRET` majburiy emas. Agar qo'yilsa, `/api/group-leads-scan` endpoint secret talab qiladi. Oddiy Vercel cron uchun qo'ymasdan ishlatish osonroq.
+`CRON_SECRET` majburiy emas. Agar qo'yilsa, `/api/group-leads-scan` endpoint secret talab qiladi. Vercel cron requestlarida `Authorization: Bearer <CRON_SECRET>` header yuboradi; manual testda esa `?secret=<CRON_SECRET>` ishlatish mumkin.
 
 ## Telegram bot sozlash
 
@@ -319,13 +319,38 @@ Config va scan state topic:
 TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<Sozlamalar topic ID>
 ```
 
-Vercel cron:
+Vercel cron endpoint:
 
 ```text
 /api/group-leads-scan
 ```
 
-`vercel.json` cronni har daqiqada ishga tushiradi.
+`vercel.json` default holatda deploy yiqilmasligi uchun cronni kuniga 1 marta ishga tushiradi:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/group-leads-scan",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}
+```
+
+Vercel Hobby plan rasmiy cheklovi bo'yicha cron faqat kuniga 1 marta ishlaydi. Har daqiqa yoki har 5 daqiqada scan kerak bo'lsa, Vercel Pro plan yoki tashqi cron service ishlating. Tashqi cron `/api/group-leads-scan` endpointini chaqirishi mumkin.
+
+Manual test:
+
+```bash
+curl "https://<VERCEL_DOMAIN>/api/group-leads-scan"
+```
+
+Agar `CRON_SECRET` qo'yilgan bo'lsa:
+
+```bash
+curl "https://<VERCEL_DOMAIN>/api/group-leads-scan?secret=<CRON_SECRET>"
+```
 
 Birinchi scan eski tarixni lid qilib yubormaydi. Faqat oxirgi xabar ID sini state qilib saqlaydi va keyingi xabarlardan boshlaydi.
 
@@ -424,4 +449,3 @@ BayClub narxlari defaultga qaytsa:
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://domain.vercel.app/api/telegram"
 ```
-

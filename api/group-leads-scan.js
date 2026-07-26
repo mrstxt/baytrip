@@ -97,7 +97,11 @@ function parseMarkerJson(text, marker) {
   const jsonStart = raw.indexOf("{");
   const jsonEnd = raw.lastIndexOf("}");
   if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
-  return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+  try {
+    return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    return null;
+  }
 }
 
 async function readLatestMarker(client, marker) {
