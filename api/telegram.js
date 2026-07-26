@@ -28,6 +28,7 @@ const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
 const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
 const BUTTON_LOGOUT = "🚪 Chiqish";
+const BUTTON_BACK = "⬅️ Orqaga";
 
 let groupLeadEmployeesCache = null;
 
@@ -205,8 +206,8 @@ function buildGroupLeadsKeyboard() {
   return {
     keyboard: [
       [{ text: BUTTON_GROUPS }, { text: BUTTON_KEYWORDS }],
-      [{ text: BUTTON_EMPLOYEES }, { text: BUTTON_RECENT_ACTIONS }],
-      [{ text: BUTTON_LOGOUT }],
+      [{ text: BUTTON_EMPLOYEES }],
+      [{ text: BUTTON_BACK }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -1487,6 +1488,7 @@ async function handleBotUpdate(body, token) {
     BUTTON_EMPLOYEES,
     BUTTON_RECENT_ACTIONS,
     BUTTON_LOGOUT,
+    BUTTON_BACK,
   ].includes(text)) {
     if (!isAllowedAdmin(message)) {
       await sendBotMessage(token, chatId, buildAdminDeniedText(message));
@@ -1511,6 +1513,8 @@ async function handleBotUpdate(body, token) {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
         reply_markup: buildRemoveKeyboard(),
       });
+    } else if (text === BUTTON_BACK) {
+      await sendAdminPanel(token, chatId);
     }
     return { ok: true };
   }
