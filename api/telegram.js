@@ -31,6 +31,9 @@ const BUTTON_STATS = "📊 Statistika";
 const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
 const BUTTON_LOGOUT = "🚪 Chiqish";
 const BUTTON_BACK = "⬅️ Orqaga";
+const DEFAULT_GROUP_LEAD_KEYWORD_COUNT = 100;
+const DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT = 30;
+const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 30;
 
 let groupLeadEmployeesCache = null;
 
@@ -267,7 +270,7 @@ async function sendAdminPanel(token, chatId) {
       "Mavjud bo'limlar:",
       "📣 Aksiyalar obunachilariga xabar yuborish",
       "💳 BayClub tarif narxlarini o'zgartirish",
-      "🔎 Guruhlar va kalit so'zlarni alohida sozlash",
+      "🔎 Guruh lidlari: 30 daqiqalik scan va 100 ta default kalit so'z",
       "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
     ].join("\n"),
@@ -342,7 +345,10 @@ async function sendGroupLeadsMenu(token, chatId) {
     [
       "<b>Guruh lidlari sozlamalari</b>",
       "",
-      "Guruhlarni, kalit so'zlarni va hodimlarni alohida kiritish mumkin.",
+      `Default algoritm: oxirgi ${DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES} daqiqadagi xabarlar tekshiriladi.`,
+      `Default kalit so'zlar: ${DEFAULT_GROUP_LEAD_KEYWORD_COUNT} ta (${DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT} ta ruscha).`,
+      "",
+      "Guruhlarni, qo'shimcha kalit so'zlarni va hodimlarni alohida kiritish mumkin.",
       "Profil session kiritilgan guruhlarni o'qiy olishi kerak.",
     ].join("\n"),
     { reply_markup: buildGroupLeadsKeyboard() }
@@ -1158,11 +1164,15 @@ function parseGroupLeadsConfigText(text) {
 }
 
 function normalizeGroupLeadsConfig(config) {
+  const scanWindowMinutes = Number(config?.scanWindowMinutes);
   return {
     enabled: config?.enabled !== false,
     groups: Array.isArray(config?.groups) ? config.groups.filter((group) => group?.id) : [],
     keywords: Array.isArray(config?.keywords) ? config.keywords.map((item) => clean(item, "").toLowerCase()).filter(Boolean) : [],
     employees: Array.isArray(config?.employees) ? config.employees.map((item) => clean(item, "")).filter(Boolean) : [],
+    scanWindowMinutes: Number.isFinite(scanWindowMinutes) && scanWindowMinutes > 0
+      ? scanWindowMinutes
+      : DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES,
   };
 }
 
@@ -1237,7 +1247,9 @@ async function sendGroupLeadsSavedMessage(token, chatId, config, title = "Guruh 
     [
       `<b>${escapeHtml(title)}</b>`,
       `Guruhlar: ${config.groups.length}`,
-      `Kalit so'zlar: ${config.keywords.length}`,
+      `Qo'shimcha kalit so'zlar: ${config.keywords.length}`,
+      `Default kalit so'zlar: ${DEFAULT_GROUP_LEAD_KEYWORD_COUNT} ta (${DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT} ta ruscha)`,
+      `Scan oynasi: ${config.scanWindowMinutes || DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES} daqiqa`,
       `Hodimlar: ${config.employees.length}`,
       warnings.length ? "" : "Cron endpoint /api/group-leads-scan shu config bo'yicha guruhlarni tekshiradi.",
       ...warnings.map((warning) => `⚠️ ${warning}`),
@@ -2170,6 +2182,8 @@ export default async function handler(req, res) {
       bayclub: getTopicId("bayclub-card"),
       promo: getTopicId("promo-subscribe"),
       contact: getTopicId("contact"),
+      groupLeads: process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID ? Number(process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID) : undefined,
+      groupLeadsConfig: getGroupLeadsConfigTopicId(),
     };
     return res.status(200).json({
       ok: true,
@@ -2181,6 +2195,11 @@ export default async function handler(req, res) {
         ? `${String(process.env.TELEGRAM_CHAT_ID).slice(0, 5)}...${String(process.env.TELEGRAM_CHAT_ID).slice(-4)}`
         : null,
       hasAdminSession: Boolean(getAdminProfileConfig()),
+      groupLeadDefaults: {
+        scanWindowMinutes: DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES,
+        keywordCount: DEFAULT_GROUP_LEAD_KEYWORD_COUNT,
+        russianKeywordCount: DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT,
+      },
       topicIds,
     });
   }
