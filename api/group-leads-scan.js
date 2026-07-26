@@ -1,5 +1,107 @@
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
+const DEFAULT_GROUP_LEAD_KEYWORDS = [
+  "tur kerak",
+  "tur bormi",
+  "tur narxi",
+  "tur paket",
+  "sayohat kerak",
+  "sayohat bormi",
+  "dam olish",
+  "putyovka",
+  "yo'llanma",
+  "avia",
+  "avia chipta",
+  "aviabilet",
+  "bilet kerak",
+  "chipta kerak",
+  "samolyot bileti",
+  "mehmonxona",
+  "hotel",
+  "otel",
+  "joy kerak",
+  "nomer kerak",
+  "transfer kerak",
+  "gid kerak",
+  "ekskursiya",
+  "viza kerak",
+  "visa kerak",
+  "sug'urta",
+  "straxovka",
+  "umra",
+  "haj",
+  "dubay",
+  "dubai",
+  "turkiya",
+  "istanbul",
+  "antalya",
+  "misr",
+  "sharm",
+  "xurgada",
+  "maldiv",
+  "tailand",
+  "yevropa",
+  "italiya",
+  "fransiya",
+  "ispaniya",
+  "germaniya",
+  "chexiya",
+  "praga",
+  "rossiya",
+  "moskva",
+  "sankt peterburg",
+  "gruziya",
+  "tbilisi",
+  "ozarbayjon",
+  "baku",
+  "qozog'iston",
+  "almaty",
+  "samarqand",
+  "buxoro",
+  "xiva",
+  "xorazm",
+  "toshkent",
+  "farg'ona",
+  "andijon",
+  "namangan",
+  "zomin",
+  "chorvoq",
+  "amirsoy",
+  "necha pul",
+  "qancha turadi",
+  "narxi qancha",
+  "chegirma",
+  "нужен тур",
+  "тур нужен",
+  "есть тур",
+  "цена тура",
+  "тур пакет",
+  "путевка",
+  "горящий тур",
+  "отдых",
+  "отпуск",
+  "авиа",
+  "авиабилет",
+  "билет нужен",
+  "самолет билет",
+  "отель",
+  "гостиница",
+  "номер нужен",
+  "трансфер",
+  "нужен гид",
+  "экскурсия",
+  "виза",
+  "страховка",
+  "сколько стоит",
+  "какая цена",
+  "цена",
+  "скидка",
+  "акция",
+  "дешево",
+  "семейный",
+  "с детьми",
+  "на двоих",
+];
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -136,6 +238,38 @@ function findMatchedKeywords(message, keywords) {
   return keywords.filter((keyword) => normalized.includes(normalizeText(keyword)));
 }
 
+function getLeadKeywords(config) {
+  return [
+    ...new Set(
+      [
+        ...(Array.isArray(config?.keywords) ? config.keywords : []),
+        ...DEFAULT_GROUP_LEAD_KEYWORDS,
+      ]
+        .map((keyword) => clean(keyword).toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function getScanWindowMinutes(config) {
+  const parsed = Number(
+    process.env.TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES ||
+    config?.scanWindowMinutes ||
+    30
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+}
+
+function getMessageDate(message) {
+  return message?.date instanceof Date ? message.date : new Date(message?.date);
+}
+
+function isWithinScanWindow(message, cutoffDate) {
+  if (!cutoffDate) return true;
+  const messageDate = getMessageDate(message);
+  return Number.isFinite(messageDate.getTime()) && messageDate >= cutoffDate;
+}
+
 function getSenderLabel(message) {
   const sender = message.sender;
   if (!sender) return "Noma'lum";
@@ -223,14 +357,13 @@ async function scanGroup(client, group, config, state) {
   const entity = await client.getEntity(getEntityInput(group.id));
   const lastId = Number(state[group.id] || 0);
   const limit = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 40);
+  const shouldScanHistory = process.env.TELEGRAM_GROUP_LEADS_SCAN_HISTORY === "true";
+  const windowMinutes = getScanWindowMinutes(config);
+  const cutoffDate = shouldScanHistory ? null : new Date(Date.now() - windowMinutes * 60 * 1000);
   const found = [];
   let newestId = lastId;
-
-  if (!lastId && process.env.TELEGRAM_GROUP_LEADS_SCAN_HISTORY !== "true") {
-    const latest = await client.getMessages(entity, { limit: 1 });
-    const latestMessage = Array.isArray(latest) ? latest[0] : latest?.[0];
-    return { found, newestId: latestMessage?.id || 0 };
-  }
+  let checked = 0;
+  let skippedOld = 0;
 
   const iterator = client.iterMessages(entity, {
     limit: Number.isFinite(limit) ? limit : 40,
@@ -245,17 +378,23 @@ async function scanGroup(client, group, config, state) {
   for (const message of messages.reverse()) {
     if (!message?.id) continue;
     newestId = Math.max(newestId, message.id);
+    checked += 1;
+
+    if (!isWithinScanWindow(message, cutoffDate)) {
+      skippedOld += 1;
+      continue;
+    }
 
     const text = clean(message.message);
     if (!text) continue;
 
-    const matchedKeywords = findMatchedKeywords(text, config.keywords);
+    const matchedKeywords = findMatchedKeywords(text, getLeadKeywords(config));
     if (matchedKeywords.length === 0) continue;
 
     found.push({ group, message, matchedKeywords });
   }
 
-  return { found, newestId };
+  return { found, newestId, checked, skippedOld };
 }
 
 export default async function handler(req, res) {
@@ -277,7 +416,7 @@ export default async function handler(req, res) {
   try {
     const result = await withAdminClient(async (client) => {
       const config = await readLatestMarker(client, GROUP_LEADS_CONFIG_MARKER);
-      if (!config?.enabled || !Array.isArray(config.groups) || !Array.isArray(config.keywords)) {
+      if (!config?.enabled || !Array.isArray(config.groups)) {
         return { scanned: 0, sent: 0, skipped: "config_missing" };
       }
 
@@ -285,12 +424,16 @@ export default async function handler(req, res) {
       const nextState = { ...state };
       const leadTopicId = getLeadTopicId();
       let sent = 0;
+      let checked = 0;
+      let skippedOld = 0;
       const errors = [];
 
       for (const group of config.groups) {
         try {
           const scan = await scanGroup(client, group, config, state);
           nextState[group.id] = scan.newestId;
+          checked += scan.checked || 0;
+          skippedOld += scan.skippedOld || 0;
 
           for (const lead of scan.found) {
             await sendBotMessage(
@@ -313,7 +456,15 @@ export default async function handler(req, res) {
       }
 
       await saveState(token, nextState);
-      return { scanned: config.groups.length, sent, errors };
+      return {
+        scanned: config.groups.length,
+        checked,
+        skippedOld,
+        sent,
+        windowMinutes: getScanWindowMinutes(config),
+        keywordCount: getLeadKeywords(config).length,
+        errors,
+      };
     });
 
     return res.status(200).json({ ok: true, ...result });
