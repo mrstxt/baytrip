@@ -1664,8 +1664,7 @@ function buildClientGreeting(body) {
   const name = clean(body.name).split(/\s+/)[0];
 
   if (body.type === "contact") {
-    const request = clean(body.message, "murojaatingiz");
-    return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. Sayt orqali "${request}" bo'yicha murojaat qilgan ekansiz. Sizga yordam berish uchun yozdim.`;
+    return `Assalomu aleykum, ${name}. BayTrip turizm kompaniyasi operatori bo'laman. Sayt orqali murojaatingiz bo'yicha yozyotgan edim. Sizga yordam berish uchun yozdim.`;
   }
 
   if (body.type === "promo-subscribe") {
