@@ -27,6 +27,7 @@ const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
 const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
+const BUTTON_STATS = "📊 Statistika";
 const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
 const BUTTON_LOGOUT = "🚪 Chiqish";
 const BUTTON_BACK = "⬅️ Orqaga";
@@ -220,7 +221,8 @@ function buildAdminPanelKeyboard() {
   return {
     keyboard: [
       [{ text: BUTTON_PROMO }, { text: BUTTON_BAYCLUB_PRICES }],
-      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_RECENT_ACTIONS }],
+      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_STATS }],
+      [{ text: BUTTON_RECENT_ACTIONS }],
       [{ text: BUTTON_LOGOUT }],
     ],
     resize_keyboard: true,
@@ -257,6 +259,7 @@ async function sendAdminPanel(token, chatId) {
       "📣 Aksiyalar obunachilariga xabar yuborish",
       "💳 BayClub tarif narxlarini o'zgartirish",
       "🔎 Guruhlar va kalit so'zlarni alohida sozlash",
+      "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
     ].join("\n"),
     { reply_markup: buildAdminPanelKeyboard() }
@@ -910,6 +913,152 @@ function buildRecentActionsMessage(actions) {
   });
 
   return lines.join("\n");
+}
+
+function getTodayStartTashkent() {
+  const now = new Date();
+  const tashkentParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const year = tashkentParts.find((part) => part.type === "year")?.value;
+  const month = tashkentParts.find((part) => part.type === "month")?.value;
+  const day = tashkentParts.find((part) => part.type === "day")?.value;
+  return new Date(`${year}-${month}-${day}T00:00:00+05:00`);
+}
+
+function incrementCount(map, key, amount = 1) {
+  const normalized = clean(key, "");
+  if (!normalized) return;
+  map.set(normalized, (map.get(normalized) || 0) + amount);
+}
+
+function extractEmployeeFromLeadText(text) {
+  return extractLeadLineValue(text, "Hodim");
+}
+
+function getLeadRequestText(text) {
+  return extractLeadLineValue(text, "Xabar") || extractLeadLineValue(text, "Tur") || "";
+}
+
+function classifyRequestText(text) {
+  const normalized = normalizeText(text);
+  const categories = [
+    { label: "Italiya turlari", terms: ["italiya", "italy"] },
+    { label: "Turkiya turlari", terms: ["turkiya", "istanbul", "antalya"] },
+    { label: "Dubai turlari", terms: ["dubay", "dubai"] },
+    { label: "Umra", terms: ["umra", "haj"] },
+    { label: "Avia chipta", terms: ["avia", "chipta", "bilet"] },
+    { label: "Mehmonxona", terms: ["mehmonxona", "hotel", "otel"] },
+    { label: "Ekskursiya", terms: ["ekskursiya", "gid", "sayohat"] },
+    { label: "Ichki turizm", terms: ["samarqand", "buxoro", "xiva", "xorazm", "farg'ona", "fargona", "toshkent"] },
+    { label: "Tur kerak", terms: ["tur kerak", "tur", "paket"] },
+  ];
+
+  const matched = categories.find((category) => category.terms.some((term) => normalized.includes(normalizeText(term))));
+  if (matched) return matched.label;
+
+  const compact = clean(text, "").slice(0, 60);
+  return compact || "Aniqlanmagan";
+}
+
+function formatTopCounts(map, emptyText = "Ma'lumot yo'q") {
+  const rows = [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  return rows.length ? rows.map(([name, count], index) => `${index + 1}. ${escapeHtml(name)} — ${count}`).join("\n") : emptyText;
+}
+
+async function getLeadStats() {
+  const topicIds = [
+    getTopicId("contact"),
+    process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID ? Number(process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID) : undefined,
+  ]
+    .filter((value) => Number.isFinite(value))
+    .filter((value, index, values) => values.indexOf(value) === index);
+
+  if (topicIds.length === 0) {
+    throw new Error("Murojaatlar yoki guruh lidlari topic ID topilmadi.");
+  }
+
+  return withAdminClient(async (client) => {
+    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const todayStart = getTodayStartTashkent();
+    const scanLimit = Number(process.env.TELEGRAM_LEAD_STATS_SCAN_LIMIT || 300);
+    const employeesToday = new Map();
+    const requestTypes = new Map();
+    let todayLeads = 0;
+    let approvedToday = 0;
+    let totalScanned = 0;
+
+    for (const topicId of topicIds) {
+      const iterator = client.iterMessages(entity, {
+        limit: Number.isFinite(scanLimit) ? scanLimit : 300,
+        replyTo: topicId,
+      });
+
+      for await (const message of iterator) {
+        const text = clean(message.message, "");
+        if (!text) continue;
+        totalScanned += 1;
+
+        const messageDate = message.date instanceof Date ? message.date : new Date(message.date);
+        const isToday = messageDate >= todayStart;
+        const requestText = getLeadRequestText(text);
+        if (requestText) incrementCount(requestTypes, classifyRequestText(requestText));
+
+        if (!isToday) continue;
+        todayLeads += 1;
+
+        const employee = extractEmployeeFromLeadText(text);
+        if (employee) {
+          approvedToday += 1;
+          incrementCount(employeesToday, employee);
+        }
+      }
+    }
+
+    return {
+      topicCount: topicIds.length,
+      totalScanned,
+      todayLeads,
+      approvedToday,
+      employeesToday,
+      requestTypes,
+    };
+  });
+}
+
+function buildLeadStatsMessage(stats) {
+  return [
+    "<b>📊 Murojaatlar statistikasi</b>",
+    "",
+    `Bugungi lidlar: <b>${stats.todayLeads}</b>`,
+    `Bugun tasdiqlangan: <b>${stats.approvedToday}</b>`,
+    `Tekshirilgan topiclar: <b>${stats.topicCount}</b>`,
+    "",
+    "<b>Hodimlar bo'yicha bugun:</b>",
+    formatTopCounts(stats.employeesToday),
+    "",
+    "<b>Ko'p uchrayotgan murojaatlar:</b>",
+    formatTopCounts(stats.requestTypes),
+  ].join("\n");
+}
+
+async function sendLeadStats(token, chatId) {
+  try {
+    const stats = await getLeadStats();
+    await sendBotMessage(token, chatId, buildLeadStatsMessage(stats), {
+      reply_markup: buildAdminPanelKeyboard(),
+    });
+  } catch (error) {
+    await sendBotMessage(
+      token,
+      chatId,
+      `Statistikani o'qishda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+      { reply_markup: buildAdminPanelKeyboard() }
+    );
+  }
 }
 
 async function sendRecentAdminActions(token, chatId) {
@@ -1611,6 +1760,7 @@ async function handleBotUpdate(body, token) {
     BUTTON_GROUPS,
     BUTTON_KEYWORDS,
     BUTTON_EMPLOYEES,
+    BUTTON_STATS,
     BUTTON_RECENT_ACTIONS,
     BUTTON_LOGOUT,
     BUTTON_BACK,
@@ -1632,6 +1782,8 @@ async function handleBotUpdate(body, token) {
       await sendGroupLeadsKeywordsPrompt(token, chatId);
     } else if (text === BUTTON_EMPLOYEES) {
       await sendGroupLeadsEmployeesPrompt(token, chatId);
+    } else if (text === BUTTON_STATS) {
+      await sendLeadStats(token, chatId);
     } else if (text === BUTTON_RECENT_ACTIONS) {
       await sendRecentAdminActions(token, chatId);
     } else if (text === BUTTON_LOGOUT) {

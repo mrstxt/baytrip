@@ -120,6 +120,7 @@ TELEGRAM_PROMO_SCAN_LIMIT=500
 TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
 TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
+TELEGRAM_LEAD_STATS_SCAN_LIMIT=300
 TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
 TELEGRAM_ADMIN_ACTIONS_LIMIT=8
 TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS=3500
@@ -192,12 +193,13 @@ Admin panelga kirish:
 /login
 ```
 
-Bot avval login, keyin parol so'raydi. Login/parol to'g'ri bo'lsa inline panel chiqadi:
+Bot avval login, keyin parol so'raydi. Login/parol to'g'ri bo'lsa admin panel tugmalari chiqadi:
 
 ```text
 📣 Aksiya xabar yuborish
-💳 BayClub narxlarini o'zgartirish
-🔎 Guruh lid sozlamalari
+💳 BayClub narxlari
+🔎 Guruh lidlari
+📊 Statistika
 🧾 Oxirgi amallar
 🚪 Chiqish
 ```
@@ -389,6 +391,16 @@ Admin paneldagi `Oxirgi amallar` tugmasi quyidagilarni ko'rsatadi:
 - Guruh lid scan state yozuvlari.
 
 Bu bo'lim Telegram config topiclarni admin profil session orqali o'qiydi.
+
+## Statistika
+
+Admin paneldagi `📊 Statistika` tugmasi `Murojaatlar` va `Guruh lidlari` topiclaridagi lead xabarlarni o'qib ko'rsatadi:
+
+- Bugun nechta lid tushgani.
+- Bugun qaysi hodim nechta murojaatni tasdiqlagani.
+- Ko'p uchrayotgan murojaat turlari.
+
+`TELEGRAM_LEAD_STATS_SCAN_LIMIT` nechta oxirgi xabar scan qilinishini belgilaydi.
 
 ## Ishga tushirish
 
