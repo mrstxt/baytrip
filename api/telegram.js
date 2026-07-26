@@ -1398,14 +1398,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "JSON formati noto'g'ri." });
   }
 
-  const isTelegramUpdate =
-    Object.prototype.hasOwnProperty.call(body ?? {}, "update_id") ||
-    Object.prototype.hasOwnProperty.call(body ?? {}, "message") ||
-    Object.prototype.hasOwnProperty.call(body ?? {}, "edited_message") ||
-    Object.prototype.hasOwnProperty.call(body ?? {}, "callback_query") ||
-    Object.prototype.hasOwnProperty.call(body ?? {}, "channel_post") ||
-    Object.prototype.hasOwnProperty.call(body ?? {}, "my_chat_member") ||
-    Object.prototype.hasOwnProperty.call(body ?? {}, "chat_member");
+  const isTelegramUpdate = Object.prototype.hasOwnProperty.call(body ?? {}, "update_id");
 
   if (isTelegramUpdate) {
     try {
