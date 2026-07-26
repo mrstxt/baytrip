@@ -191,6 +191,31 @@ async function editMessageReplyMarkup(token, chatId, messageId, replyMarkup) {
   return data;
 }
 
+async function editBotMessageText(token, chatId, messageId, text, extra = {}) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      disable_web_page_preview: true,
+      ...extra,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    console.error("telegram editMessageText failed", {
+      chatId,
+      messageId,
+      status: response.status,
+      description: data?.description,
+    });
+  }
+  return data;
+}
+
 function buildAdminPanelKeyboard() {
   return {
     keyboard: [
@@ -613,6 +638,39 @@ function extractApprovalLeadData(text) {
     matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
     link: clean(parsed.link, ""),
   };
+}
+
+function stripLeadDataMarkers(text) {
+  return String(text ?? "")
+    .split("\n")
+    .filter((line) => !line.includes(SITE_LEAD_DATA_MARKER) && !line.includes(GROUP_LEAD_DATA_MARKER))
+    .join("\n")
+    .trim();
+}
+
+function replaceProfileStatus(text, nextStatus) {
+  const lines = String(text ?? "").split("\n");
+  const statusIndex = lines.findIndex((line) => line.includes("Profil xabari statusi:"));
+  if (statusIndex >= 0) {
+    lines[statusIndex] = `📨 Profil xabari statusi: ${nextStatus}`;
+    return lines.join("\n");
+  }
+
+  return [String(text ?? "").trim(), "", `📨 Profil xabari statusi: ${nextStatus}`].filter(Boolean).join("\n");
+}
+
+function buildApprovedLeadEditedText(originalText, employeeName, result) {
+  const cleaned = stripLeadDataMarkers(originalText);
+  const status = result.sent
+    ? `Mijozga xabar yuborildi: @${result.username}`
+    : `Mijozga xabar yuborilmadi: ${result.error}`;
+  const withoutOldStatus = replaceProfileStatus(cleaned, status);
+
+  return [
+    withoutOldStatus,
+    "",
+    `👤 Hodim: ${employeeName}`,
+  ].join("\n");
 }
 
 function titleCaseUz(value) {
@@ -1355,18 +1413,12 @@ async function handleBotUpdate(body, token) {
 
       try {
         const result = await sendApprovedLeadGreetingToClient(leadData, employeeName);
-        await editMessageReplyMarkup(token, chatId, callback.message.message_id, { inline_keyboard: [] });
-        await sendBotMessage(
+        await editBotMessageText(
           token,
           chatId,
-          [
-            "<b>✅ Lid tasdiqlandi</b>",
-            `Hodim: <b>${escapeHtml(employeeName)}</b>`,
-            result.sent
-              ? `Mijozga xabar yuborildi: <code>@${escapeHtml(result.username)}</code>`
-              : `Mijozga xabar yuborilmadi: ${escapeHtml(result.error)}`,
-          ].join("\n"),
-          callback.message?.message_thread_id ? { message_thread_id: callback.message.message_thread_id } : {}
+          callback.message.message_id,
+          buildApprovedLeadEditedText(callback.message?.text, employeeName, result),
+          { reply_markup: { inline_keyboard: [] } }
         );
       } catch (error) {
         await sendBotMessage(
@@ -1723,6 +1775,10 @@ function buildProfileDeliveryText(delivery) {
     return `Admin profilidan mijozga 1-xabar yuborildi.`;
   }
 
+  if (clean(delivery.error, "").startsWith("Tasdiqlashdan keyin")) {
+    return clean(delivery.error);
+  }
+
   return `Admin profilidan yuborilmadi: ${clean(delivery.error, "noma'lum xatolik")}`;
 }
 
@@ -1775,7 +1831,6 @@ function buildMessage(body, profileDelivery) {
   const telegramUsername = isValidTelegramUsername(body.telegramUsername)
     ? `@${normalizeTelegramUsername(body.telegramUsername)}`
     : "";
-  const clientGreeting = buildClientGreeting(body);
   const createdAt = new Intl.DateTimeFormat("uz-UZ", {
     timeZone: "Asia/Tashkent",
     dateStyle: "medium",
@@ -1825,10 +1880,11 @@ function buildMessage(body, profileDelivery) {
     );
   }
 
+  if (body.type === "contact") {
+    lines.splice(0, 2);
+  }
+
   lines.push(
-    "",
-    `🤖 <b>Bot/profil uchun 1-xabar:</b>`,
-    escapeHtml(clientGreeting),
     "",
     `📨 <b>Profil xabari statusi:</b> ${escapeHtml(buildProfileDeliveryText(profileDelivery))}`,
     "",
