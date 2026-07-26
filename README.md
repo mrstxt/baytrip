@@ -360,20 +360,20 @@ Vercel cron endpoint:
 /api/group-leads-scan
 ```
 
-`vercel.json` cronni har soat ishga tushiradi:
+`vercel.json` default holatda deploy yiqilmasligi uchun cronni kuniga 1 marta ishga tushiradi:
 
 ```json
 {
   "crons": [
     {
       "path": "/api/group-leads-scan",
-      "schedule": "0 * * * *"
+      "schedule": "0 5 * * *"
     }
   ]
 }
 ```
 
-Agar Vercel planingiz hourly cronni qo'llamasa, tashqi cron service ishlating. Tashqi cron `/api/group-leads-scan` endpointini har 1 soatda chaqirishi mumkin.
+Har 1 soatda scan kerak bo'lsa, Vercel Pro plan yoki tashqi cron service ishlating. Tashqi cron `/api/group-leads-scan` endpointini har 1 soatda chaqirishi mumkin.
 
 Manual test:
 
