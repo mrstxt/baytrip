@@ -230,7 +230,7 @@ export function Contact() {
     if (name.trim().length < 3) return setErr("Ismingizni kiriting.");
     if (!/^\+?[\d\s()-]{9,}$/.test(phone.trim())) return setErr("Telefon raqamini to'g'ri kiriting.");
     const normalizedTelegram = telegramUsername.trim().replace(/^@+/, "");
-    if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizedTelegram)) {
+    if (normalizedTelegram && !/^[a-zA-Z0-9_]{5,32}$/.test(normalizedTelegram)) {
       return setErr("Telegram username'ni to'g'ri kiriting. Masalan: baytrip_user");
     }
     setErr("");
@@ -241,7 +241,7 @@ export function Contact() {
         type: "contact",
         name,
         phone,
-        telegramUsername: `@${normalizedTelegram}`,
+        telegramUsername: normalizedTelegram ? `@${normalizedTelegram}` : "",
         message: msg,
         source: "Aloqa formasi",
       });
@@ -344,7 +344,7 @@ export function Contact() {
                   />
                 </label>
                 <label className="mt-3 block">
-                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Telegram username</span>
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-400">Telegram username (ixtiyoriy)</span>
                   <span className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
                     <AtSign className="h-4 w-4 text-brand-600" />
                     <input

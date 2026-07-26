@@ -31,6 +31,11 @@ function normalizeTelegramUsername(value) {
   return clean(value, "").replace(/^@+/, "");
 }
 
+function isValidTelegramUsername(value) {
+  const username = normalizeTelegramUsername(value);
+  return /^[a-zA-Z0-9_]{5,32}$/.test(username);
+}
+
 async function readRequestBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
@@ -107,7 +112,15 @@ async function sendBotMessage(token, chatId, text, extra = {}) {
     }),
   });
 
-  return response.json().catch(() => null);
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    console.error("telegram sendMessage failed", {
+      chatId,
+      status: response.status,
+      description: data?.description,
+    });
+  }
+  return data;
 }
 
 async function answerCallbackQuery(token, callbackQueryId, text = "") {
@@ -978,22 +991,26 @@ function validateLead(body) {
   if (!body || typeof body !== "object") return "So'rov formati noto'g'ri.";
   if (!Object.prototype.hasOwnProperty.call(LEAD_LABELS, body.type)) return "So'rov turi noto'g'ri.";
   if (body.type === "promo-subscribe") {
-    if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizeTelegramUsername(body.telegramUsername))) {
+    if (!isValidTelegramUsername(body.telegramUsername)) {
       return "Telegram username noto'g'ri.";
     }
     return null;
   }
   if (clean(body.name, "").length < 3) return "Ism to'liq emas.";
   if (!/^\+?[\d\s()-]{9,}$/.test(clean(body.phone, ""))) return "Telefon raqam noto'g'ri.";
-  if (!/^[a-zA-Z0-9_]{5,32}$/.test(normalizeTelegramUsername(body.telegramUsername))) {
-    return "Telegram username noto'g'ri.";
-  }
 
   if (body.type === "bayclub-card") {
+    if (!isValidTelegramUsername(body.telegramUsername)) {
+      return "Telegram username noto'g'ri.";
+    }
     const required = ["cardType", "plan", "price"];
     const missing = required.find((key) => clean(body[key], "") === "");
     if (missing) return `BayClub ma'lumoti yetishmayapti: ${missing}.`;
     return null;
+  }
+
+  if (clean(body.telegramUsername, "") && !isValidTelegramUsername(body.telegramUsername)) {
+    return "Telegram username noto'g'ri.";
   }
 
   if (body.type !== "contact") {
@@ -1052,9 +1069,19 @@ function buildProfileDeliveryText(delivery) {
   return `Admin profilidan yuborilmadi: ${clean(delivery.error, "noma'lum xatolik")}`;
 }
 
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 async function sendAdminProfileMessage(body, message) {
   const config = getAdminProfileConfig();
   if (!config) return { enabled: false, sent: false };
+  if (!isValidTelegramUsername(body.telegramUsername)) {
+    return { enabled: true, sent: false, error: "Mijoz Telegram username qoldirmagan." };
+  }
 
   const username = `@${normalizeTelegramUsername(body.telegramUsername)}`;
   let client;
@@ -1088,7 +1115,9 @@ async function sendAdminProfileMessage(body, message) {
 function buildMessage(body, profileDelivery) {
   const label = LEAD_LABELS[body.type];
   const source = clean(body.source, "Sayt");
-  const telegramUsername = `@${normalizeTelegramUsername(body.telegramUsername)}`;
+  const telegramUsername = isValidTelegramUsername(body.telegramUsername)
+    ? `@${normalizeTelegramUsername(body.telegramUsername)}`
+    : "";
   const clientGreeting = buildClientGreeting(body);
   const createdAt = new Intl.DateTimeFormat("uz-UZ", {
     timeZone: "Asia/Tashkent",
@@ -1099,7 +1128,7 @@ function buildMessage(body, profileDelivery) {
   const lines = [
     `<b>${escapeHtml(label)}</b>`,
     "",
-    `💬 <b>Telegram:</b> ${escapeHtml(telegramUsername)}`,
+    `💬 <b>Telegram:</b> ${escapeHtml(telegramUsername || "Ko'rsatilmagan")}`,
   ];
 
   if (body.type !== "promo-subscribe") {
@@ -1154,9 +1183,20 @@ function buildMessage(body, profileDelivery) {
 }
 
 export default async function handler(req, res) {
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      service: "telegram",
+      webhook: "/api/telegram",
+      hasBotToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
+      hasChatId: Boolean(process.env.TELEGRAM_CHAT_ID),
+      hasAdminSession: Boolean(getAdminProfileConfig()),
+    });
+  }
+
   if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, error: "Faqat POST so'rov qabul qilinadi." });
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ ok: false, error: "Faqat GET yoki POST so'rov qabul qilinadi." });
   }
 
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -1182,8 +1222,19 @@ export default async function handler(req, res) {
     Object.prototype.hasOwnProperty.call(body ?? {}, "chat_member");
 
   if (isTelegramUpdate) {
-    const result = await handleBotUpdate(body, token);
-    return res.status(200).json(result);
+    try {
+      const result = await handleBotUpdate(body, token);
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error("telegram update handler failed", {
+        error: error instanceof Error ? error.message : error,
+        updateId: body?.update_id,
+      });
+      return res.status(200).json({
+        ok: false,
+        error: error instanceof Error ? error.message : "Telegram update ishlanmadi.",
+      });
+    }
   }
 
   console.log("lead request", { type: body?.type ?? "missing" });
@@ -1193,22 +1244,26 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error });
   }
 
-  const clientGreeting = buildClientGreeting(body);
-  const profileDelivery = await sendAdminProfileMessage(body, clientGreeting);
-
-  const payload = {
-    chat_id: chatId,
-    text: buildMessage(body, profileDelivery),
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-  };
-
-  const threadId = getTopicId(body.type);
-  if (threadId) {
-    payload.message_thread_id = threadId;
-  }
-
   try {
+    const clientGreeting = buildClientGreeting(body);
+    const profileDelivery = await withTimeout(
+      sendAdminProfileMessage(body, clientGreeting),
+      Number(process.env.TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS || 3500),
+      { enabled: true, sent: false, error: "Profil xabari timeout bo'ldi, ariza topicga yuborildi." }
+    );
+
+    const payload = {
+      chat_id: chatId,
+      text: buildMessage(body, profileDelivery),
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    };
+
+    const threadId = getTopicId(body.type);
+    if (threadId) {
+      payload.message_thread_id = threadId;
+    }
+
     const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

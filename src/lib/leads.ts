@@ -4,7 +4,7 @@ export type TourLeadPayload = {
   type: "external-tour" | "domestic-tour";
   name: string;
   phone: string;
-  telegramUsername: string;
+  telegramUsername?: string;
   tourTitle: string;
   tourCity: string;
   tourCountry: string;
@@ -19,7 +19,7 @@ export type ContactLeadPayload = {
   type: "contact";
   name: string;
   phone: string;
-  telegramUsername: string;
+  telegramUsername?: string;
   message?: string;
   source: string;
 };
