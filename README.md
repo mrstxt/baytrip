@@ -117,7 +117,7 @@ Qo'shimcha sozlamalar:
 
 ```env
 TELEGRAM_PROMO_SCAN_LIMIT=500
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=10
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
 TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
 TELEGRAM_LEAD_STATS_SCAN_LIMIT=300
@@ -294,7 +294,7 @@ Tezkor command:
 
 ## Guruhlardan lid yig'ish
 
-Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Xabar ichida belgilangan kalit so'z topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
+Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 10 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
 Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar alohida sozlanadi.
 
@@ -347,20 +347,20 @@ Vercel cron endpoint:
 /api/group-leads-scan
 ```
 
-`vercel.json` default holatda deploy yiqilmasligi uchun cronni kuniga 1 marta ishga tushiradi:
+`vercel.json` cronni har soat ishga tushiradi:
 
 ```json
 {
   "crons": [
     {
       "path": "/api/group-leads-scan",
-      "schedule": "0 5 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
 ```
 
-Vercel Hobby plan rasmiy cheklovi bo'yicha cron faqat kuniga 1 marta ishlaydi. Har daqiqa yoki har 5 daqiqada scan kerak bo'lsa, Vercel Pro plan yoki tashqi cron service ishlating. Tashqi cron `/api/group-leads-scan` endpointini chaqirishi mumkin.
+Agar Vercel planingiz hourly cronni qo'llamasa, tashqi cron service ishlating. Tashqi cron `/api/group-leads-scan` endpointini har 1 soatda chaqirishi mumkin.
 
 Manual test:
 
@@ -374,7 +374,14 @@ Agar `CRON_SECRET` qo'yilgan bo'lsa:
 curl "https://<VERCEL_DOMAIN>/api/group-leads-scan?secret=<CRON_SECRET>"
 ```
 
-Birinchi scan eski tarixni lid qilib yubormaydi. Faqat oxirgi xabar ID sini state qilib saqlaydi va keyingi xabarlardan boshlaydi.
+Birinchi scan ham oxirgi 1 soatdagi eng so'nggi 10 ta xabarni tekshiradi. Keyingi scanlarda state orqali oldin ko'rilgan xabarlar takror yuborilmaydi.
+
+Default qiymatlar:
+
+```env
+TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES=60
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=10
+```
 
 Eski tarixni ham scan qilish kerak bo'lsa:
 

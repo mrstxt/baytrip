@@ -255,9 +255,14 @@ function getScanWindowMinutes(config) {
   const parsed = Number(
     process.env.TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES ||
     config?.scanWindowMinutes ||
-    30
+    60
   );
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
+}
+
+function getScanMessageLimit() {
+  const parsed = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
 }
 
 function getMessageDate(message) {
@@ -356,7 +361,7 @@ function isAuthorized(req) {
 async function scanGroup(client, group, config, state) {
   const entity = await client.getEntity(getEntityInput(group.id));
   const lastId = Number(state[group.id] || 0);
-  const limit = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 40);
+  const limit = getScanMessageLimit();
   const shouldScanHistory = process.env.TELEGRAM_GROUP_LEADS_SCAN_HISTORY === "true";
   const windowMinutes = getScanWindowMinutes(config);
   const cutoffDate = shouldScanHistory ? null : new Date(Date.now() - windowMinutes * 60 * 1000);
@@ -366,7 +371,7 @@ async function scanGroup(client, group, config, state) {
   let skippedOld = 0;
 
   const iterator = client.iterMessages(entity, {
-    limit: Number.isFinite(limit) ? limit : 40,
+    limit,
     minId: Number.isFinite(lastId) ? lastId : 0,
   });
 
@@ -462,6 +467,7 @@ export default async function handler(req, res) {
         skippedOld,
         sent,
         windowMinutes: getScanWindowMinutes(config),
+        messageLimit: getScanMessageLimit(),
         keywordCount: getLeadKeywords(config).length,
         errors,
       };

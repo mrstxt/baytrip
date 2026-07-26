@@ -33,7 +33,8 @@ const BUTTON_LOGOUT = "🚪 Chiqish";
 const BUTTON_BACK = "⬅️ Orqaga";
 const DEFAULT_GROUP_LEAD_KEYWORD_COUNT = 100;
 const DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT = 30;
-const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 30;
+const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
+const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 10;
 
 let groupLeadEmployeesCache = null;
 
@@ -270,7 +271,7 @@ async function sendAdminPanel(token, chatId) {
       "Mavjud bo'limlar:",
       "📣 Aksiyalar obunachilariga xabar yuborish",
       "💳 BayClub tarif narxlarini o'zgartirish",
-      "🔎 Guruh lidlari: 30 daqiqalik scan va 100 ta default kalit so'z",
+      "🔎 Guruh lidlari: 1 soat, oxirgi 10 xabar, 100 ta default kalit so'z",
       "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
     ].join("\n"),
@@ -345,7 +346,7 @@ async function sendGroupLeadsMenu(token, chatId) {
     [
       "<b>Guruh lidlari sozlamalari</b>",
       "",
-      `Default algoritm: oxirgi ${DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES} daqiqadagi xabarlar tekshiriladi.`,
+      `Default algoritm: oxirgi 1 soatdagi eng so'nggi ${DEFAULT_GROUP_LEAD_MESSAGE_LIMIT} ta xabar tekshiriladi.`,
       `Default kalit so'zlar: ${DEFAULT_GROUP_LEAD_KEYWORD_COUNT} ta (${DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT} ta ruscha).`,
       "",
       "Guruhlarni, qo'shimcha kalit so'zlarni va hodimlarni alohida kiritish mumkin.",
@@ -2197,6 +2198,7 @@ export default async function handler(req, res) {
       hasAdminSession: Boolean(getAdminProfileConfig()),
       groupLeadDefaults: {
         scanWindowMinutes: DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES,
+        messageLimit: DEFAULT_GROUP_LEAD_MESSAGE_LIMIT,
         keywordCount: DEFAULT_GROUP_LEAD_KEYWORD_COUNT,
         russianKeywordCount: DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT,
       },
