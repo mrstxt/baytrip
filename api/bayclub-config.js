@@ -23,6 +23,16 @@ function getBayClubConfigTopicId() {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function getBayClubConfigTopicIds() {
+  return [
+    process.env.TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID,
+    process.env.TELEGRAM_BAYCLUB_TOPIC_ID,
+  ]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .filter((value, index, values) => values.indexOf(value) === index);
+}
+
 async function withAdminClient(fn) {
   const config = getAdminProfileConfig();
   if (!config) {
@@ -52,7 +62,15 @@ function parseConfigMessage(text) {
   const jsonStart = raw.indexOf("{");
   const jsonEnd = raw.lastIndexOf("}");
   if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
-  return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+  try {
+    return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    return null;
+  }
+}
+
+function mergePriceConfigs(configs) {
+  return configs.reduce((merged, config) => ({ ...merged, ...config }), {});
 }
 
 export default async function handler(req, res) {
@@ -62,21 +80,32 @@ export default async function handler(req, res) {
   }
 
   try {
-    const topicId = getBayClubConfigTopicId();
-    if (!topicId) {
+    const topicIds = getBayClubConfigTopicIds();
+    if (topicIds.length === 0) {
       return res.status(200).json({ ok: true, plans: {} });
     }
 
     const plans = await withAdminClient(async (client) => {
       const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
-      const iterator = client.iterMessages(entity, { limit: 100, replyTo: topicId });
+      const configs = [];
+      const wantedPlans = new Set(["3 oy", "6 oy", "12 oy"]);
 
-      for await (const message of iterator) {
-        const parsed = parseConfigMessage(message.message);
-        if (parsed) return parsed;
+      for (const topicId of topicIds) {
+        const iterator = client.iterMessages(entity, { limit: 150, replyTo: topicId });
+
+        for await (const message of iterator) {
+          const parsed = parseConfigMessage(message.message);
+          if (!parsed) continue;
+
+          configs.unshift(parsed);
+          const merged = mergePriceConfigs(configs);
+          if ([...wantedPlans].every((plan) => merged[plan])) {
+            return merged;
+          }
+        }
       }
 
-      return {};
+      return mergePriceConfigs(configs);
     });
 
     return res.status(200).json({ ok: true, plans });

@@ -90,7 +90,8 @@ function isAllowedAdmin(message) {
   const from = message?.from;
   const id = from?.id ? String(from.id) : "";
   const username = normalizeTelegramUsername(from?.username);
-  return allowed.includes(id) || allowed.includes(username) || allowed.includes(`@${username}`);
+  const allowedUsernames = allowed.map((value) => value.replace(/^@+/, "").toLowerCase());
+  return allowed.includes(id) || allowedUsernames.includes(username.toLowerCase());
 }
 
 async function sendBotMessage(token, chatId, text, extra = {}) {
@@ -238,6 +239,52 @@ function getBayClubConfigTopicId() {
   const raw = process.env.TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID || process.env.TELEGRAM_BAYCLUB_TOPIC_ID;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getBayClubConfigTopicIds() {
+  return [
+    process.env.TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID,
+    process.env.TELEGRAM_BAYCLUB_TOPIC_ID,
+  ]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .filter((value, index, values) => values.indexOf(value) === index);
+}
+
+function mergePriceConfigs(configs) {
+  return configs.reduce((merged, config) => ({ ...merged, ...config }), {});
+}
+
+function hasAllBayClubPlans(config) {
+  return ["3 oy", "6 oy", "12 oy"].every((plan) => config?.[plan]?.price);
+}
+
+async function getLatestBayClubPriceConfig() {
+  const topicIds = getBayClubConfigTopicIds();
+  if (topicIds.length === 0) return {};
+
+  return withAdminClient(async (client) => {
+    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const configs = [];
+    const wantedPlans = new Set(["3 oy", "6 oy", "12 oy"]);
+
+    for (const topicId of topicIds) {
+      const iterator = client.iterMessages(entity, { limit: 150, replyTo: topicId });
+
+      for await (const message of iterator) {
+        const parsed = parseMarkerJson(message.message, PRICE_CONFIG_MARKER);
+        if (!parsed) continue;
+
+        configs.unshift(parsed);
+        const merged = mergePriceConfigs(configs);
+        if ([...wantedPlans].every((plan) => merged[plan])) {
+          return merged;
+        }
+      }
+    }
+
+    return mergePriceConfigs(configs);
+  });
 }
 
 async function saveBayClubPriceConfig(token, config) {
@@ -584,13 +631,16 @@ async function runBayClubPriceUpdate(token, chatId, text) {
   }
 
   try {
-    await saveBayClubPriceConfig(token, config);
+    const updatesAllPlans = hasAllBayClubPlans(config);
+    const previousConfig = updatesAllPlans ? {} : await getLatestBayClubPriceConfig();
+    const nextConfig = { ...previousConfig, ...config };
+    await saveBayClubPriceConfig(token, nextConfig);
     await sendBotMessage(
       token,
       chatId,
       [
         "<b>BayClub narxlari yangilandi</b>",
-        ...Object.entries(config).map(([title, value]) => `${title}: ${value.price}${value.oldPrice ? ` / eski: ${value.oldPrice}` : ""}`),
+        ...Object.entries(nextConfig).map(([title, value]) => `${title}: ${value.price}${value.oldPrice ? ` / eski: ${value.oldPrice}` : ""}`),
         "",
         "Sayt yangi config'ni /api/bayclub-config orqali o'qiydi.",
       ].join("\n"),
