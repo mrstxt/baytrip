@@ -120,6 +120,7 @@ TELEGRAM_PROMO_SCAN_LIMIT=500
 TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
 TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
+TELEGRAM_GROUP_LEADS_EMPLOYEES=Shoxruza,Sohibjon,Aziz
 TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
 TELEGRAM_ADMIN_ACTIONS_LIMIT=8
 TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS=3500
@@ -294,18 +295,32 @@ Tezkor command:
 
 Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Xabar ichida belgilangan kalit so'z topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
-Admin panelda `Guruh lid sozlamalari` tugmasini bosing va quyidagi formatda reply qiling:
+Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar alohida sozlanadi.
+
+`👥 Guruhlarni sozlash` uchun format:
 
 ```text
-Guruhlar:
 @fargonaturizm=Farg'ona turizm
 -1001234567890=Samarqand sayohat
+```
 
-Kalit so'zlar:
+`🔑 Kalit so'zlar` uchun format:
+
+```text
 tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi
 ```
 
 Guruh chap tomonda public username yoki `-100...` ID bo'ladi. `=` dan keyingi qism ichki lid xabarida ko'rinadigan nom.
+
+Guruhdan lid topilganda mijozga avtomatik xabar ketmaydi. Lid avval ichki topicga `✅ Tasdiqlash` tugmasi bilan tushadi. Hodim tasdiqlashni bosadi, o'z ismini tanlaydi, shundan keyin profil session orqali mijoz username'iga birinchi xabar yuboriladi.
+
+Hodimlar ro'yxati:
+
+```env
+TELEGRAM_GROUP_LEADS_EMPLOYEES=Shoxruza,Sohibjon,Aziz
+```
+
+Bu env bo'sh bo'lsa, tasdiqlagan Telegram foydalanuvchisining ismi bitta tugma sifatida chiqadi.
 
 Lidlar tushadigan topic:
 

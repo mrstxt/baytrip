@@ -16,6 +16,9 @@ const GROUP_LEADS_GROUPS_REPLY_MARKER = "Guruhlar ro'yxatini shu xabarga reply q
 const GROUP_LEADS_KEYWORDS_REPLY_MARKER = "Kalit so'zlarni shu xabarga reply qilib yuboring.";
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
+const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
+const GROUP_LEAD_CONFIRM_CALLBACK = "gl_confirm";
+const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
 const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
 const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
@@ -157,6 +160,29 @@ async function answerCallbackQuery(token, callbackQueryId, text = "") {
   });
 
   return response.json().catch(() => null);
+}
+
+async function editMessageReplyMarkup(token, chatId, messageId, replyMarkup) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/editMessageReplyMarkup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: replyMarkup,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    console.error("telegram editMessageReplyMarkup failed", {
+      chatId,
+      messageId,
+      status: response.status,
+      description: data?.description,
+    });
+  }
+  return data;
 }
 
 function buildAdminPanelKeyboard() {
@@ -477,6 +503,105 @@ function parseMarkerJson(text, marker) {
   } catch {
     return null;
   }
+}
+
+function getCallbackUserName(callback) {
+  const from = callback?.from;
+  const first = clean(from?.first_name, "");
+  const last = clean(from?.last_name, "");
+  const username = normalizeTelegramUsername(from?.username);
+  return clean([first, last].filter(Boolean).join(" "), username || "Hodim");
+}
+
+function getGroupLeadEmployees(callback) {
+  const fromEnv = clean(process.env.TELEGRAM_GROUP_LEADS_EMPLOYEES || process.env.TELEGRAM_EMPLOYEES, "");
+  const employees = fromEnv
+    .split(/[,;\n]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return employees.length ? employees : [getCallbackUserName(callback)];
+}
+
+function buildGroupLeadEmployeeKeyboard(callback) {
+  const rows = getGroupLeadEmployees(callback).map((name, index) => ([
+    {
+      text: name,
+      callback_data: `${GROUP_LEAD_AGENT_CALLBACK_PREFIX}${index}`,
+    },
+  ]));
+
+  return { inline_keyboard: rows };
+}
+
+function getGroupLeadEmployeeByCallback(callback, data) {
+  const index = Number(String(data).replace(GROUP_LEAD_AGENT_CALLBACK_PREFIX, ""));
+  const employees = getGroupLeadEmployees(callback);
+  return employees[Number.isInteger(index) && index >= 0 ? index : 0] || getCallbackUserName(callback);
+}
+
+function extractGroupLeadData(text) {
+  const parsed = parseMarkerJson(text, GROUP_LEAD_DATA_MARKER);
+  if (!parsed || typeof parsed !== "object") return null;
+  return {
+    username: normalizeTelegramUsername(parsed.username),
+    sender: clean(parsed.sender, "Mijoz"),
+    groupTitle: clean(parsed.groupTitle, "Telegram guruh"),
+    message: clean(parsed.message, ""),
+    matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
+    link: clean(parsed.link, ""),
+  };
+}
+
+function titleCaseUz(value) {
+  const text = clean(value, "");
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+}
+
+function detectLeadSubject(message, matchedKeywords = []) {
+  const normalized = String(message ?? "").toLowerCase();
+  const destinations = [
+    "italiya",
+    "turkiya",
+    "dubay",
+    "misr",
+    "maldiv",
+    "tailand",
+    "umra",
+    "samarqand",
+    "buxoro",
+    "farg'ona",
+    "fargona",
+    "toshkent",
+    "xorazm",
+    "xiva",
+  ];
+  const foundDestination = destinations.find((item) => normalized.includes(item));
+  if (foundDestination) return `${titleCaseUz(foundDestination.replace("fargona", "farg'ona"))} turlari`;
+
+  const keyword = matchedKeywords.map((item) => clean(item, "")).find(Boolean);
+  return keyword ? `${keyword} bo'yicha` : "turizm xizmatlari bo'yicha";
+}
+
+function buildGroupLeadGreeting(leadData, employeeName) {
+  const customerName = clean(leadData.sender, "mijoz")
+    .replace(/\s*\(@[^)]+\)\s*$/, "")
+    .split(/\s+/)[0];
+  const subject = detectLeadSubject(leadData.message, leadData.matchedKeywords);
+
+  return `Assalomu aleykum, ${customerName}. BayTrip turizm kompaniyasi operatori ${employeeName} bo'laman. "${subject}" bo'yicha murojaat qilgan ekansiz. Sizga batafsil ma'lumot berish uchun yozdim.`;
+}
+
+async function sendGroupLeadGreetingToClient(leadData, employeeName) {
+  if (!leadData?.username) {
+    return { sent: false, error: "Mijoz username topilmadi." };
+  }
+
+  const message = buildGroupLeadGreeting(leadData, employeeName);
+  return withAdminClient(async (client) => {
+    await client.sendMessage(`@${leadData.username}`, { message });
+    return { sent: true, username: leadData.username, message };
+  });
 }
 
 function formatActionDate(date) {
@@ -1090,6 +1215,56 @@ async function handleBotUpdate(body, token) {
 
     if (data === "login_start") {
       await sendLoginPrompt(token, chatId);
+      return { ok: true };
+    }
+
+    if (data === GROUP_LEAD_CONFIRM_CALLBACK) {
+      const leadData = extractGroupLeadData(callback.message?.text);
+      if (!leadData) {
+        await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
+        return { ok: true };
+      }
+
+      await editMessageReplyMarkup(
+        token,
+        chatId,
+        callback.message.message_id,
+        buildGroupLeadEmployeeKeyboard(callback)
+      );
+      return { ok: true };
+    }
+
+    if (data.startsWith(GROUP_LEAD_AGENT_CALLBACK_PREFIX)) {
+      const leadData = extractGroupLeadData(callback.message?.text);
+      const employeeName = getGroupLeadEmployeeByCallback(callback, data);
+      if (!leadData) {
+        await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
+        return { ok: true };
+      }
+
+      try {
+        const result = await sendGroupLeadGreetingToClient(leadData, employeeName);
+        await editMessageReplyMarkup(token, chatId, callback.message.message_id, { inline_keyboard: [] });
+        await sendBotMessage(
+          token,
+          chatId,
+          [
+            "<b>✅ Lid tasdiqlandi</b>",
+            `Hodim: <b>${escapeHtml(employeeName)}</b>`,
+            result.sent
+              ? `Mijozga xabar yuborildi: <code>@${escapeHtml(result.username)}</code>`
+              : `Mijozga xabar yuborilmadi: ${escapeHtml(result.error)}`,
+          ].join("\n"),
+          callback.message?.message_thread_id ? { message_thread_id: callback.message.message_thread_id } : {}
+        );
+      } catch (error) {
+        await sendBotMessage(
+          token,
+          chatId,
+          `Mijozga xabar yuborishda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+          callback.message?.message_thread_id ? { message_thread_id: callback.message.message_thread_id } : {}
+        );
+      }
       return { ok: true };
     }
 
