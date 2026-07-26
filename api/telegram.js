@@ -1027,14 +1027,23 @@ function getTopicId(type) {
     "external-tour": process.env.TELEGRAM_EXTERNAL_TOPIC_ID,
     "domestic-tour": process.env.TELEGRAM_DOMESTIC_TOPIC_ID,
     "bayclub-card": process.env.TELEGRAM_BAYCLUB_TOPIC_ID,
-    "promo-subscribe": process.env.TELEGRAM_PROMO_TOPIC_ID || process.env.TELEGRAM_CONTACT_TOPIC_ID,
-    contact: process.env.TELEGRAM_CONTACT_TOPIC_ID,
+    "promo-subscribe": process.env.TELEGRAM_PROMO_TOPIC_ID || getContactTopicRaw(),
+    contact: getContactTopicRaw(),
   };
 
   const raw = map[type];
   if (!raw) return undefined;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getContactTopicRaw() {
+  return (
+    process.env.TELEGRAM_CONTACT_TOPIC_ID ||
+    process.env.TELEGRAM_SUPPORT_TOPIC_ID ||
+    process.env.TELEGRAM_MUROJAAT_TOPIC_ID ||
+    process.env.TELEGRAM_MUROJAATLAR_TOPIC_ID
+  );
 }
 
 function buildClientGreeting(body) {
@@ -1182,8 +1191,68 @@ function buildMessage(body, profileDelivery) {
   return lines.join("\n");
 }
 
+async function sendLeadToTelegram(token, payload) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (response.ok && data?.ok) {
+    return { ok: true, data, fallbackToMainChat: false };
+  }
+
+  const description = data?.description || "Telegramga yuborib bo'lmadi.";
+  console.error("lead sendMessage failed", {
+    status: response.status,
+    description,
+    chatId: payload.chat_id,
+    threadId: payload.message_thread_id,
+  });
+
+  if (!payload.message_thread_id) {
+    return { ok: false, error: description };
+  }
+
+  const fallbackPayload = {
+    ...payload,
+    text: [
+      "⚠️ <b>Topic ID bo'yicha yuborilmadi, asosiy guruhga tushdi.</b>",
+      `Xato: ${escapeHtml(description)}`,
+      `Topic ID: <code>${escapeHtml(payload.message_thread_id)}</code>`,
+      "",
+      payload.text,
+    ].join("\n"),
+  };
+  delete fallbackPayload.message_thread_id;
+
+  const fallbackResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(fallbackPayload),
+  });
+  const fallbackData = await fallbackResponse.json().catch(() => null);
+
+  if (!fallbackResponse.ok || !fallbackData?.ok) {
+    return {
+      ok: false,
+      error: fallbackData?.description || description,
+    };
+  }
+
+  return { ok: true, data: fallbackData, fallbackToMainChat: true, originalError: description };
+}
+
 export default async function handler(req, res) {
   if (req.method === "GET") {
+    const topicIds = {
+      external: getTopicId("external-tour"),
+      domestic: getTopicId("domestic-tour"),
+      bayclub: getTopicId("bayclub-card"),
+      promo: getTopicId("promo-subscribe"),
+      contact: getTopicId("contact"),
+    };
     return res.status(200).json({
       ok: true,
       service: "telegram",
@@ -1191,6 +1260,7 @@ export default async function handler(req, res) {
       hasBotToken: Boolean(process.env.TELEGRAM_BOT_TOKEN),
       hasChatId: Boolean(process.env.TELEGRAM_CHAT_ID),
       hasAdminSession: Boolean(getAdminProfileConfig()),
+      topicIds,
     });
   }
 
@@ -1264,20 +1334,22 @@ export default async function handler(req, res) {
       payload.message_thread_id = threadId;
     }
 
-    const telegramResponse = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await telegramResponse.json();
-    if (!telegramResponse.ok || !data.ok) {
-      const description = data.description || "Telegramga yuborib bo'lmadi.";
-      return res.status(502).json({ ok: false, error: description });
+    const delivery = await sendLeadToTelegram(token, payload);
+    if (!delivery.ok) {
+      return res.status(502).json({ ok: false, error: delivery.error });
     }
 
-    return res.status(200).json({ ok: true, profileMessageSent: profileDelivery.sent });
-  } catch {
+    return res.status(200).json({
+      ok: true,
+      profileMessageSent: profileDelivery.sent,
+      topicId: threadId,
+      fallbackToMainChat: delivery.fallbackToMainChat,
+    });
+  } catch (error) {
+    console.error("lead request failed", {
+      error: error instanceof Error ? error.message : error,
+      type: body?.type,
+    });
     return res.status(502).json({ ok: false, error: "Telegram bilan aloqa uzildi." });
   }
 }
