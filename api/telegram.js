@@ -46,6 +46,15 @@ function clean(value, fallback = "-") {
   return text || fallback;
 }
 
+function normalizeText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/ʻ|ʼ|`/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeTelegramUsername(value) {
   return clean(value, "").replace(/^@+/, "");
 }
