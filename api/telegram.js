@@ -24,6 +24,7 @@ const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
 const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
 const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
+const BUTTON_LEAD_SCANNER = "🧭 Lid skaner";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
 const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
@@ -234,8 +235,8 @@ function buildAdminPanelKeyboard() {
   return {
     keyboard: [
       [{ text: BUTTON_PROMO }, { text: BUTTON_BAYCLUB_PRICES }],
-      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_STATS }],
-      [{ text: BUTTON_RECENT_ACTIONS }],
+      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_LEAD_SCANNER }],
+      [{ text: BUTTON_STATS }, { text: BUTTON_RECENT_ACTIONS }],
       [{ text: BUTTON_LOGOUT }],
     ],
     resize_keyboard: true,
@@ -272,6 +273,7 @@ async function sendAdminPanel(token, chatId) {
       "📣 Aksiyalar obunachilariga xabar yuborish",
       "💳 BayClub tarif narxlarini o'zgartirish",
       "🔎 Guruh lidlari: 1 soat, oxirgi 10 xabar, 100 ta default kalit so'z",
+      "🧭 Lid skaner: hoziroq test scan qilish",
       "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
     ].join("\n"),
@@ -1093,6 +1095,81 @@ async function sendRecentAdminActions(token, chatId) {
   }
 }
 
+function getCronSecret() {
+  return clean(process.env.CRON_SECRET || process.env.TELEGRAM_GROUP_LEADS_CRON_SECRET, "");
+}
+
+function getRequestBaseUrl(req) {
+  const host = clean(req.headers["x-forwarded-host"] || req.headers.host, "");
+  if (!host) return "";
+  const proto = clean(req.headers["x-forwarded-proto"], "https").split(",")[0];
+  return `${proto}://${host}`;
+}
+
+function buildLeadScannerResultMessage(result) {
+  if (!result?.ok) {
+    return `Lid skaner ishlamadi: ${escapeHtml(result?.error || "noma'lum xatolik")}`;
+  }
+
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  return [
+    "<b>🧭 Lid skaner yakunlandi</b>",
+    "",
+    `Guruhlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
+    `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
+    `Topicga tashlangan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
+    `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
+    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 10)} xabar</b>`,
+    `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
+    errors.length ? "" : "",
+    errors.length ? "<b>Xatolar:</b>" : "",
+    ...errors.slice(0, 5).map((item) => `${escapeHtml(item.group)}: ${escapeHtml(item.error)}`),
+  ].filter(Boolean).join("\n");
+}
+
+async function runLeadScannerNow(token, chatId, baseUrl) {
+  if (!baseUrl) {
+    await sendBotMessage(token, chatId, "Lid skaner URL topilmadi. Deploy domain yoki request host aniqlanmadi.", {
+      reply_markup: buildAdminPanelKeyboard(),
+    });
+    return;
+  }
+
+  await sendBotMessage(
+    token,
+    chatId,
+    [
+      "<b>🧭 Lid skaner boshlandi</b>",
+      "",
+      "Har bir sozlangan guruhdan oxirgi 10 ta xabar tekshiriladi.",
+      "Oxirgi 1 soat ichida kalit so'zga mos lid bo'lsa, belgilangan topicga tashlanadi.",
+    ].join("\n")
+  );
+
+  try {
+    const secret = getCronSecret();
+    const response = await fetch(`${baseUrl}/api/group-leads-scan`, {
+      method: "GET",
+      headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+    });
+    const result = await response.json().catch(() => ({
+      ok: false,
+      error: "Skaner javobi JSON formatida emas.",
+    }));
+
+    await sendBotMessage(token, chatId, buildLeadScannerResultMessage(result), {
+      reply_markup: buildAdminPanelKeyboard(),
+    });
+  } catch (error) {
+    await sendBotMessage(
+      token,
+      chatId,
+      `Lid skaner xatoligi: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+      { reply_markup: buildAdminPanelKeyboard() }
+    );
+  }
+}
+
 function parseListValue(value) {
   return String(value ?? "")
     .split(/[,;\n]+/)
@@ -1100,12 +1177,19 @@ function parseListValue(value) {
     .filter(Boolean);
 }
 
+function normalizeGroupIdInput(groupId) {
+  const value = clean(groupId, "");
+  if (/^100\d{6,}$/.test(value)) return `-${value}`;
+  return value;
+}
+
 function parseGroupLine(line) {
   const [rawId, rawTitle] = line.split("=").map((item) => item.trim());
   if (!rawId) return null;
+  const id = normalizeGroupIdInput(rawId);
   return {
-    id: rawId,
-    title: rawTitle || rawId,
+    id,
+    title: rawTitle || id,
   };
 }
 
@@ -1577,7 +1661,7 @@ async function runTestLead(token, chatId, type) {
   );
 }
 
-async function handleBotUpdate(body, token) {
+async function handleBotUpdate(body, token, context = {}) {
   if (body.callback_query) {
     const callback = body.callback_query;
     const chatId = callback.message?.chat?.id;
@@ -1779,6 +1863,7 @@ async function handleBotUpdate(body, token) {
     BUTTON_PROMO,
     BUTTON_BAYCLUB_PRICES,
     BUTTON_GROUP_LEADS,
+    BUTTON_LEAD_SCANNER,
     BUTTON_GROUPS,
     BUTTON_KEYWORDS,
     BUTTON_EMPLOYEES,
@@ -1798,6 +1883,8 @@ async function handleBotUpdate(body, token) {
       await sendBayClubPricePrompt(token, chatId);
     } else if (text === BUTTON_GROUP_LEADS) {
       await sendGroupLeadsMenu(token, chatId);
+    } else if (text === BUTTON_LEAD_SCANNER) {
+      await runLeadScannerNow(token, chatId, context.baseUrl);
     } else if (text === BUTTON_GROUPS) {
       await sendGroupLeadsGroupsPrompt(token, chatId);
     } else if (text === BUTTON_KEYWORDS) {
@@ -1861,6 +1948,15 @@ async function handleBotUpdate(body, token) {
       return { ok: true };
     }
     await sendAdminPanel(token, chatId);
+    return { ok: true };
+  }
+
+  if (text.startsWith("/scan") || text.startsWith("/scanner")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await runLeadScannerNow(token, chatId, context.baseUrl);
     return { ok: true };
   }
 
@@ -2228,7 +2324,9 @@ export default async function handler(req, res) {
 
   if (isTelegramUpdate) {
     try {
-      const result = await handleBotUpdate(body, token);
+      const result = await handleBotUpdate(body, token, {
+        baseUrl: getRequestBaseUrl(req),
+      });
       return res.status(200).json(result);
     } catch (error) {
       console.error("telegram update handler failed", {

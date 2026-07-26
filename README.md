@@ -183,6 +183,7 @@ Bot commandlari:
 /start
 /login
 /panel
+/scan
 /logout
 /promo PAROL xabar matni
 ```
@@ -199,6 +200,7 @@ Bot avval login, keyin parol so'raydi. Login/parol to'g'ri bo'lsa admin panel tu
 📣 Aksiya xabar yuborish
 💳 BayClub narxlari
 🔎 Guruh lidlari
+🧭 Lid skaner
 📊 Statistika
 🧾 Oxirgi amallar
 🚪 Chiqish
@@ -297,6 +299,8 @@ Tezkor command:
 Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 10 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
 Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar alohida sozlanadi.
+
+`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 10 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tashlaydi. Tezkor command sifatida `/scan` ham ishlaydi.
 
 `👥 Guruhlarni sozlash` uchun format:
 

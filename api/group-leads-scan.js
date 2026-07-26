@@ -289,14 +289,20 @@ function getSenderLabel(message) {
 }
 
 function getMessageLink(groupId, messageId) {
-  const value = String(groupId ?? "");
+  const value = normalizeGroupIdInput(groupId);
   if (value.startsWith("@")) return `https://t.me/${value.slice(1)}/${messageId}`;
   const channelId = value.startsWith("-100") ? value.slice(4) : "";
   return channelId ? `https://t.me/c/${channelId}/${messageId}` : "";
 }
 
-function getEntityInput(groupId) {
+function normalizeGroupIdInput(groupId) {
   const value = clean(groupId);
+  if (/^100\d{6,}$/.test(value)) return `-${value}`;
+  return value;
+}
+
+function getEntityInput(groupId) {
+  const value = normalizeGroupIdInput(groupId);
   return /^-?\d+$/.test(value) ? Number(value) : value;
 }
 
