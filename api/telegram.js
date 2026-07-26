@@ -12,8 +12,17 @@ const PASSWORD_REPLY_MARKER = "Admin parolni shu xabarga reply qilib yuboring.";
 const PRICE_REPLY_MARKER = "BayClub tarif narxlarini shu xabarga reply qilib yuboring.";
 const PRICE_CONFIG_MARKER = "BAYCLUB_PRICE_CONFIG";
 const GROUP_LEADS_REPLY_MARKER = "Guruh lid sozlamalarini shu xabarga reply qilib yuboring.";
+const GROUP_LEADS_GROUPS_REPLY_MARKER = "Guruhlar ro'yxatini shu xabarga reply qilib yuboring.";
+const GROUP_LEADS_KEYWORDS_REPLY_MARKER = "Kalit so'zlarni shu xabarga reply qilib yuboring.";
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
+const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
+const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
+const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
+const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
+const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
+const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
+const BUTTON_LOGOUT = "🚪 Chiqish";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -152,13 +161,30 @@ async function answerCallbackQuery(token, callbackQueryId, text = "") {
 
 function buildAdminPanelKeyboard() {
   return {
-    inline_keyboard: [
-      [{ text: "📣 Aksiya xabar yuborish", callback_data: "promo_broadcast" }],
-      [{ text: "💳 BayClub narxlarini o'zgartirish", callback_data: "bayclub_prices" }],
-      [{ text: "🔎 Guruh lid sozlamalari", callback_data: "group_leads_config" }],
-      [{ text: "🧾 Oxirgi amallar", callback_data: "recent_actions" }],
-      [{ text: "🚪 Chiqish", callback_data: "logout" }],
+    keyboard: [
+      [{ text: BUTTON_PROMO }, { text: BUTTON_BAYCLUB_PRICES }],
+      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_RECENT_ACTIONS }],
+      [{ text: BUTTON_LOGOUT }],
     ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
+function buildGroupLeadsKeyboard() {
+  return {
+    keyboard: [
+      [{ text: BUTTON_GROUPS }, { text: BUTTON_KEYWORDS }],
+      [{ text: BUTTON_RECENT_ACTIONS }, { text: BUTTON_LOGOUT }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
+function buildRemoveKeyboard() {
+  return {
+    remove_keyboard: true,
   };
 }
 
@@ -172,7 +198,7 @@ async function sendAdminPanel(token, chatId) {
       "Mavjud bo'limlar:",
       "📣 Aksiyalar obunachilariga xabar yuborish",
       "💳 BayClub tarif narxlarini o'zgartirish",
-      "🔎 Guruhlardan lid yig'ish sozlamalari",
+      "🔎 Guruhlar va kalit so'zlarni alohida sozlash",
       "🧾 Oxirgi sozlama amallarini ko'rish",
     ].join("\n"),
     { reply_markup: buildAdminPanelKeyboard() }
@@ -192,6 +218,103 @@ async function sendLoginPrompt(token, chatId) {
       reply_markup: {
         force_reply: true,
         input_field_placeholder: "Login...",
+      },
+    }
+  );
+}
+
+async function sendPromoPrompt(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      PROMO_REPLY_MARKER,
+      "",
+      "Masalan:",
+      "Bugun Dubai tur paketlariga maxsus chegirma! Batafsil: baytrip.uz",
+    ].join("\n"),
+    {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "Aksiya xabari...",
+      },
+    }
+  );
+}
+
+async function sendBayClubPricePrompt(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      PRICE_REPLY_MARKER,
+      "",
+      "Namuna:",
+      "<code>3=299000|399000</code>",
+      "<code>12=899000|1299000</code>",
+      "<code>6=499000|699000</code>",
+      "",
+      "Birinchi narx hozirgi narx, ikkinchisi chizilgan eski narx.",
+    ].join("\n"),
+    {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "3=299000|399000...",
+      },
+    }
+  );
+}
+
+async function sendGroupLeadsMenu(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      "<b>Guruh lidlari sozlamalari</b>",
+      "",
+      "Guruhlarni va kalit so'zlarni alohida kiritish mumkin.",
+      "Profil session kiritilgan guruhlarni o'qiy olishi kerak.",
+    ].join("\n"),
+    { reply_markup: buildGroupLeadsKeyboard() }
+  );
+}
+
+async function sendGroupLeadsGroupsPrompt(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      GROUP_LEADS_GROUPS_REPLY_MARKER,
+      "",
+      "Har qatorga bittadan guruh yozing:",
+      "<code>@fargonaturizm=Farg'ona turizm</code>",
+      "<code>-1001234567890=Samarqand sayohat</code>",
+      "",
+      "Guruh ID o'rniga public @username ham yozsa bo'ladi.",
+    ].join("\n"),
+    {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "@guruh=Guruh nomi...",
+      },
+    }
+  );
+}
+
+async function sendGroupLeadsKeywordsPrompt(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      GROUP_LEADS_KEYWORDS_REPLY_MARKER,
+      "",
+      "Kalit so'zlarni vergul yoki yangi qatorda yozing:",
+      "<code>tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi</code>",
+    ].join("\n"),
+    {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "tur kerak, ekskursiya...",
       },
     }
   );
@@ -578,6 +701,51 @@ function parseGroupLeadsConfigText(text) {
   return config;
 }
 
+function normalizeGroupLeadsConfig(config) {
+  return {
+    enabled: config?.enabled !== false,
+    groups: Array.isArray(config?.groups) ? config.groups.filter((group) => group?.id) : [],
+    keywords: Array.isArray(config?.keywords) ? config.keywords.map((item) => clean(item, "").toLowerCase()).filter(Boolean) : [],
+  };
+}
+
+function parseGroupListText(text) {
+  const groups = [];
+  for (const rawLine of String(text ?? "").split(/\n+/)) {
+    const line = rawLine.trim();
+    if (!line || /^(guruhlar|groups)\s*:?\s*$/i.test(line)) continue;
+    const group = parseGroupLine(line.replace(/^[-*]\s*/, ""));
+    if (group) groups.push(group);
+  }
+
+  const uniqueGroups = new Map();
+  for (const group of groups) {
+    uniqueGroups.set(group.id, group);
+  }
+  return [...uniqueGroups.values()];
+}
+
+function parseKeywordListText(text) {
+  return [...new Set(parseListValue(text).map((item) => item.toLowerCase()).filter(Boolean))];
+}
+
+async function getLatestGroupLeadsConfig() {
+  const topicId = getGroupLeadsConfigTopicId();
+  if (!topicId) return normalizeGroupLeadsConfig(null);
+
+  return withAdminClient(async (client) => {
+    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const iterator = client.iterMessages(entity, { limit: 150, replyTo: topicId });
+
+    for await (const message of iterator) {
+      const parsed = parseMarkerJson(message.message, GROUP_LEADS_CONFIG_MARKER);
+      if (parsed) return normalizeGroupLeadsConfig(parsed);
+    }
+
+    return normalizeGroupLeadsConfig(null);
+  });
+}
+
 async function saveGroupLeadsConfig(token, config) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
@@ -594,6 +762,25 @@ async function saveGroupLeadsConfig(token, config) {
     chatId,
     text,
     threadId ? { message_thread_id: threadId } : {}
+  );
+}
+
+async function sendGroupLeadsSavedMessage(token, chatId, config, title = "Guruh lid sozlamalari saqlandi") {
+  const warnings = [];
+  if (config.groups.length === 0) warnings.push("Guruhlar hali kiritilmagan.");
+  if (config.keywords.length === 0) warnings.push("Kalit so'zlar hali kiritilmagan.");
+
+  await sendBotMessage(
+    token,
+    chatId,
+    [
+      `<b>${escapeHtml(title)}</b>`,
+      `Guruhlar: ${config.groups.length}`,
+      `Kalit so'zlar: ${config.keywords.length}`,
+      warnings.length ? "" : "Cron endpoint /api/group-leads-scan shu config bo'yicha guruhlarni tekshiradi.",
+      ...warnings.map((warning) => `⚠️ ${warning}`),
+    ].filter(Boolean).join("\n"),
+    { reply_markup: buildGroupLeadsKeyboard() }
   );
 }
 
@@ -620,20 +807,64 @@ async function runGroupLeadsConfigUpdate(token, chatId, text) {
 
   try {
     await saveGroupLeadsConfig(token, config);
+    await sendGroupLeadsSavedMessage(token, chatId, config);
+  } catch (error) {
+    await sendBotMessage(token, chatId, `Sozlamani saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
+  }
+}
+
+async function runGroupLeadsGroupsUpdate(token, chatId, text) {
+  const groups = parseGroupListText(text);
+  if (groups.length === 0) {
     await sendBotMessage(
       token,
       chatId,
       [
-        "<b>Guruh lid sozlamalari saqlandi</b>",
-        `Guruhlar: ${config.groups.length}`,
-        `Kalit so'zlar: ${config.keywords.length}`,
+        "Guruhlar formati noto'g'ri.",
         "",
-        "Cron endpoint /api/group-leads-scan shu config bo'yicha guruhlarni tekshiradi.",
+        "Namuna:",
+        "<code>@fargonaturizm=Farg'ona turizm</code>",
+        "<code>-1001234567890=Samarqand sayohat</code>",
       ].join("\n"),
-      { reply_markup: buildAdminPanelKeyboard() }
+      { reply_markup: buildGroupLeadsKeyboard() }
     );
+    return;
+  }
+
+  try {
+    const previousConfig = await getLatestGroupLeadsConfig();
+    const nextConfig = normalizeGroupLeadsConfig({ ...previousConfig, groups });
+    await saveGroupLeadsConfig(token, nextConfig);
+    await sendGroupLeadsSavedMessage(token, chatId, nextConfig, "Guruhlar saqlandi");
   } catch (error) {
-    await sendBotMessage(token, chatId, `Sozlamani saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
+    await sendBotMessage(token, chatId, `Guruhlarni saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
+  }
+}
+
+async function runGroupLeadsKeywordsUpdate(token, chatId, text) {
+  const keywords = parseKeywordListText(text);
+  if (keywords.length === 0) {
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        "Kalit so'zlar formati noto'g'ri.",
+        "",
+        "Namuna:",
+        "<code>tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi</code>",
+      ].join("\n"),
+      { reply_markup: buildGroupLeadsKeyboard() }
+    );
+    return;
+  }
+
+  try {
+    const previousConfig = await getLatestGroupLeadsConfig();
+    const nextConfig = normalizeGroupLeadsConfig({ ...previousConfig, keywords });
+    await saveGroupLeadsConfig(token, nextConfig);
+    await sendGroupLeadsSavedMessage(token, chatId, nextConfig, "Kalit so'zlar saqlandi");
+  } catch (error) {
+    await sendBotMessage(token, chatId, `Kalit so'zlarni saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
   }
 }
 
@@ -863,73 +1094,17 @@ async function handleBotUpdate(body, token) {
     }
 
     if (data === "promo_broadcast") {
-      await sendBotMessage(
-        token,
-        chatId,
-        [
-          PROMO_REPLY_MARKER,
-          "",
-          "Masalan:",
-          "Bugun Dubai tur paketlariga maxsus chegirma! Batafsil: baytrip.uz",
-        ].join("\n"),
-        {
-          reply_markup: {
-            force_reply: true,
-            input_field_placeholder: "Aksiya xabar matni...",
-          },
-        }
-      );
+      await sendPromoPrompt(token, chatId);
       return { ok: true };
     }
 
     if (data === "bayclub_prices") {
-      await sendBotMessage(
-        token,
-        chatId,
-        [
-          PRICE_REPLY_MARKER,
-          "",
-          "Namuna:",
-          "<code>3=299000|399000</code>",
-          "<code>12=899000|1299000</code>",
-          "<code>6=499000|699000</code>",
-          "",
-          "Birinchi narx hozirgi narx, ikkinchisi chizilgan eski narx.",
-        ].join("\n"),
-        {
-          reply_markup: {
-            force_reply: true,
-            input_field_placeholder: "3=299000|399000...",
-          },
-        }
-      );
+      await sendBayClubPricePrompt(token, chatId);
       return { ok: true };
     }
 
     if (data === "group_leads_config") {
-      await sendBotMessage(
-        token,
-        chatId,
-        [
-          GROUP_LEADS_REPLY_MARKER,
-          "",
-          "Namuna:",
-          "<code>Guruhlar:</code>",
-          "<code>@fargonaturizm=Farg'ona turizm</code>",
-          "<code>-1001234567890=Samarqand sayohat</code>",
-          "",
-          "<code>Kalit so'zlar:</code>",
-          "<code>tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi</code>",
-          "",
-          "Guruh ID o'rniga public @username ham yozsa bo'ladi. Profil session o'sha guruhga kirgan bo'lishi kerak.",
-        ].join("\n"),
-        {
-          reply_markup: {
-            force_reply: true,
-            input_field_placeholder: "Guruhlar va kalit so'zlar...",
-          },
-        }
-      );
+      await sendGroupLeadsMenu(token, chatId);
       return { ok: true };
     }
 
@@ -939,7 +1114,9 @@ async function handleBotUpdate(body, token) {
     }
 
     if (data === "logout") {
-      await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>");
+      await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
+        reply_markup: buildRemoveKeyboard(),
+      });
       return { ok: true };
     }
 
@@ -1024,6 +1201,58 @@ async function handleBotUpdate(body, token) {
     return { ok: true };
   }
 
+  if (replyText.includes(GROUP_LEADS_GROUPS_REPLY_MARKER) && !text.startsWith("/")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await runGroupLeadsGroupsUpdate(token, chatId, text);
+    return { ok: true };
+  }
+
+  if (replyText.includes(GROUP_LEADS_KEYWORDS_REPLY_MARKER) && !text.startsWith("/")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await runGroupLeadsKeywordsUpdate(token, chatId, text);
+    return { ok: true };
+  }
+
+  if ([
+    BUTTON_PROMO,
+    BUTTON_BAYCLUB_PRICES,
+    BUTTON_GROUP_LEADS,
+    BUTTON_GROUPS,
+    BUTTON_KEYWORDS,
+    BUTTON_RECENT_ACTIONS,
+    BUTTON_LOGOUT,
+  ].includes(text)) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+
+    if (text === BUTTON_PROMO) {
+      await sendPromoPrompt(token, chatId);
+    } else if (text === BUTTON_BAYCLUB_PRICES) {
+      await sendBayClubPricePrompt(token, chatId);
+    } else if (text === BUTTON_GROUP_LEADS) {
+      await sendGroupLeadsMenu(token, chatId);
+    } else if (text === BUTTON_GROUPS) {
+      await sendGroupLeadsGroupsPrompt(token, chatId);
+    } else if (text === BUTTON_KEYWORDS) {
+      await sendGroupLeadsKeywordsPrompt(token, chatId);
+    } else if (text === BUTTON_RECENT_ACTIONS) {
+      await sendRecentAdminActions(token, chatId);
+    } else if (text === BUTTON_LOGOUT) {
+      await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
+        reply_markup: buildRemoveKeyboard(),
+      });
+    }
+    return { ok: true };
+  }
+
   if (text.startsWith("/start")) {
     await sendBotMessage(
       token,
@@ -1062,12 +1291,18 @@ async function handleBotUpdate(body, token) {
   }
 
   if (text.startsWith("/panel")) {
-    await sendBotMessage(token, chatId, "Panelni ochish uchun login qiling: <code>/login PAROL</code>");
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await sendAdminPanel(token, chatId);
     return { ok: true };
   }
 
   if (text.startsWith("/logout")) {
-    await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login PAROL</code>");
+    await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
+      reply_markup: buildRemoveKeyboard(),
+    });
     return { ok: true };
   }
 
