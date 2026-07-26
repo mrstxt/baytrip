@@ -18,6 +18,7 @@ const GROUP_LEADS_EMPLOYEES_REPLY_MARKER = "Hodimlar ro'yxatini shu xabarga repl
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
+const SITE_LEAD_DATA_MARKER = "SITE_LEAD_DATA";
 const GROUP_LEAD_CONFIRM_CALLBACK = "gl_confirm";
 const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
@@ -574,16 +575,37 @@ async function buildGroupLeadEmployeeKeyboard(callback) {
   return { inline_keyboard: rows };
 }
 
+function buildLeadApprovalKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "✅ Tasdiqlash", callback_data: GROUP_LEAD_CONFIRM_CALLBACK }],
+    ],
+  };
+}
+
 async function getGroupLeadEmployeeByCallback(callback, data) {
   const index = Number(String(data).replace(GROUP_LEAD_AGENT_CALLBACK_PREFIX, ""));
   const employees = await getGroupLeadEmployees(callback);
   return employees[Number.isInteger(index) && index >= 0 ? index : 0] || getCallbackUserName(callback);
 }
 
-function extractGroupLeadData(text) {
+function extractApprovalLeadData(text) {
+  const siteLead = parseMarkerJson(text, SITE_LEAD_DATA_MARKER);
+  if (siteLead && typeof siteLead === "object") {
+    return {
+      source: "site-contact",
+      username: normalizeTelegramUsername(siteLead.username),
+      sender: clean(siteLead.sender, "Mijoz"),
+      message: clean(siteLead.message, ""),
+      matchedKeywords: [],
+      link: "",
+    };
+  }
+
   const parsed = parseMarkerJson(text, GROUP_LEAD_DATA_MARKER);
   if (!parsed || typeof parsed !== "object") return null;
   return {
+    source: "group-lead",
     username: normalizeTelegramUsername(parsed.username),
     sender: clean(parsed.sender, "Mijoz"),
     groupTitle: clean(parsed.groupTitle, "Telegram guruh"),
@@ -632,12 +654,25 @@ function buildGroupLeadGreeting(leadData, employeeName) {
   return `Assalomu aleykum, ${customerName}. BayTrip turizm kompaniyasi operatori ${employeeName} bo'laman. "${subject}" bo'yicha murojaat qilgan ekansiz. Sizga batafsil ma'lumot berish uchun yozdim.`;
 }
 
-async function sendGroupLeadGreetingToClient(leadData, employeeName) {
+function buildSiteContactGreeting(leadData, employeeName) {
+  const customerName = clean(leadData.sender, "mijoz").split(/\s+/)[0];
+  return `Assalomu aleykum, ${customerName}. BayTrip turizm kompaniyasi operatori ${employeeName} bo'laman. Sayt orqali murojaatingiz bo'yicha yozyotgan edim. Sizga yordam berish uchun yozdim.`;
+}
+
+function buildApprovedLeadGreeting(leadData, employeeName) {
+  if (leadData?.source === "site-contact") {
+    return buildSiteContactGreeting(leadData, employeeName);
+  }
+
+  return buildGroupLeadGreeting(leadData, employeeName);
+}
+
+async function sendApprovedLeadGreetingToClient(leadData, employeeName) {
   if (!leadData?.username) {
     return { sent: false, error: "Mijoz username topilmadi." };
   }
 
-  const message = buildGroupLeadGreeting(leadData, employeeName);
+  const message = buildApprovedLeadGreeting(leadData, employeeName);
   return withAdminClient(async (client) => {
     await client.sendMessage(`@${leadData.username}`, { message });
     return { sent: true, username: leadData.username, message };
@@ -1295,7 +1330,7 @@ async function handleBotUpdate(body, token) {
     }
 
     if (data === GROUP_LEAD_CONFIRM_CALLBACK) {
-      const leadData = extractGroupLeadData(callback.message?.text);
+      const leadData = extractApprovalLeadData(callback.message?.text);
       if (!leadData) {
         await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
         return { ok: true };
@@ -1311,7 +1346,7 @@ async function handleBotUpdate(body, token) {
     }
 
     if (data.startsWith(GROUP_LEAD_AGENT_CALLBACK_PREFIX)) {
-      const leadData = extractGroupLeadData(callback.message?.text);
+      const leadData = extractApprovalLeadData(callback.message?.text);
       const employeeName = await getGroupLeadEmployeeByCallback(callback, data);
       if (!leadData) {
         await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
@@ -1319,7 +1354,7 @@ async function handleBotUpdate(body, token) {
       }
 
       try {
-        const result = await sendGroupLeadGreetingToClient(leadData, employeeName);
+        const result = await sendApprovedLeadGreetingToClient(leadData, employeeName);
         await editMessageReplyMarkup(token, chatId, callback.message.message_id, { inline_keyboard: [] });
         await sendBotMessage(
           token,
@@ -1801,6 +1836,17 @@ function buildMessage(body, profileDelivery) {
     `🕒 <b>Vaqt:</b> ${escapeHtml(createdAt)}`
   );
 
+  if (body.type === "contact") {
+    const siteLeadData = {
+      username: normalizeTelegramUsername(body.telegramUsername),
+      sender: clean(body.name, "Mijoz"),
+      phone: clean(body.phone, ""),
+      message: clean(body.message, ""),
+      source,
+    };
+    lines.push("", `<code>${SITE_LEAD_DATA_MARKER} ${escapeHtml(JSON.stringify(siteLeadData))}</code>`);
+  }
+
   return lines.join("\n");
 }
 
@@ -1940,11 +1986,13 @@ export default async function handler(req, res) {
 
   try {
     const clientGreeting = buildClientGreeting(body);
-    const profileDelivery = await withTimeout(
-      sendAdminProfileMessage(body, clientGreeting),
-      Number(process.env.TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS || 3500),
-      { enabled: true, sent: false, error: "Profil xabari timeout bo'ldi, ariza topicga yuborildi." }
-    );
+    const profileDelivery = body.type === "contact"
+      ? { enabled: true, sent: false, error: "Tasdiqlashdan keyin mijozga yuboriladi." }
+      : await withTimeout(
+        sendAdminProfileMessage(body, clientGreeting),
+        Number(process.env.TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS || 3500),
+        { enabled: true, sent: false, error: "Profil xabari timeout bo'ldi, ariza topicga yuborildi." }
+      );
 
     const payload = {
       chat_id: chatId,
@@ -1952,6 +2000,10 @@ export default async function handler(req, res) {
       parse_mode: "HTML",
       disable_web_page_preview: true,
     };
+
+    if (body.type === "contact") {
+      payload.reply_markup = buildLeadApprovalKeyboard();
+    }
 
     const threadId = getTopicId(body.type);
     if (threadId) {
