@@ -120,7 +120,6 @@ TELEGRAM_PROMO_SCAN_LIMIT=500
 TELEGRAM_GROUP_LEADS_SCAN_LIMIT=40
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
 TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
-TELEGRAM_GROUP_LEADS_EMPLOYEES=Shoxruza,Sohibjon,Aziz
 TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
 TELEGRAM_ADMIN_ACTIONS_LIMIT=8
 TELEGRAM_PROFILE_MESSAGE_TIMEOUT_MS=3500
@@ -314,13 +313,19 @@ Guruh chap tomonda public username yoki `-100...` ID bo'ladi. `=` dan keyingi qi
 
 Guruhdan lid topilganda mijozga avtomatik xabar ketmaydi. Lid avval ichki topicga `✅ Tasdiqlash` tugmasi bilan tushadi. Hodim tasdiqlashni bosadi, o'z ismini tanlaydi, shundan keyin profil session orqali mijoz username'iga birinchi xabar yuboriladi.
 
-Hodimlar ro'yxati:
+`👤 Hodimlar` uchun format:
+
+```text
+Shoxruza, Sohibjon, Aziz
+```
+
+Hodimlar ro'yxati bot orqali config topicga saqlanadi. Fallback sifatida env ham ishlaydi:
 
 ```env
 TELEGRAM_GROUP_LEADS_EMPLOYEES=Shoxruza,Sohibjon,Aziz
 ```
 
-Bu env bo'sh bo'lsa, tasdiqlagan Telegram foydalanuvchisining ismi bitta tugma sifatida chiqadi.
+Botdan hodimlar kiritilmagan va env ham bo'sh bo'lsa, tasdiqlagan Telegram foydalanuvchisining ismi bitta tugma sifatida chiqadi.
 
 Lidlar tushadigan topic:
 

@@ -14,6 +14,7 @@ const PRICE_CONFIG_MARKER = "BAYCLUB_PRICE_CONFIG";
 const GROUP_LEADS_REPLY_MARKER = "Guruh lid sozlamalarini shu xabarga reply qilib yuboring.";
 const GROUP_LEADS_GROUPS_REPLY_MARKER = "Guruhlar ro'yxatini shu xabarga reply qilib yuboring.";
 const GROUP_LEADS_KEYWORDS_REPLY_MARKER = "Kalit so'zlarni shu xabarga reply qilib yuboring.";
+const GROUP_LEADS_EMPLOYEES_REPLY_MARKER = "Hodimlar ro'yxatini shu xabarga reply qilib yuboring.";
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
@@ -24,8 +25,11 @@ const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
 const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
 const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
+const BUTTON_EMPLOYEES = "👤 Hodimlar";
 const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
 const BUTTON_LOGOUT = "🚪 Chiqish";
+
+let groupLeadEmployeesCache = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -201,7 +205,8 @@ function buildGroupLeadsKeyboard() {
   return {
     keyboard: [
       [{ text: BUTTON_GROUPS }, { text: BUTTON_KEYWORDS }],
-      [{ text: BUTTON_RECENT_ACTIONS }, { text: BUTTON_LOGOUT }],
+      [{ text: BUTTON_EMPLOYEES }, { text: BUTTON_RECENT_ACTIONS }],
+      [{ text: BUTTON_LOGOUT }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -298,7 +303,7 @@ async function sendGroupLeadsMenu(token, chatId) {
     [
       "<b>Guruh lidlari sozlamalari</b>",
       "",
-      "Guruhlarni va kalit so'zlarni alohida kiritish mumkin.",
+      "Guruhlarni, kalit so'zlarni va hodimlarni alohida kiritish mumkin.",
       "Profil session kiritilgan guruhlarni o'qiy olishi kerak.",
     ].join("\n"),
     { reply_markup: buildGroupLeadsKeyboard() }
@@ -341,6 +346,25 @@ async function sendGroupLeadsKeywordsPrompt(token, chatId) {
       reply_markup: {
         force_reply: true,
         input_field_placeholder: "tur kerak, ekskursiya...",
+      },
+    }
+  );
+}
+
+async function sendGroupLeadsEmployeesPrompt(token, chatId) {
+  return sendBotMessage(
+    token,
+    chatId,
+    [
+      GROUP_LEADS_EMPLOYEES_REPLY_MARKER,
+      "",
+      "Hodim ismlarini vergul bilan yoki yangi qatorda yozing:",
+      "<code>Shoxruza, Sohibjon, Aziz</code>",
+    ].join("\n"),
+    {
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: "Shoxruza, Sohibjon...",
       },
     }
   );
@@ -513,18 +537,33 @@ function getCallbackUserName(callback) {
   return clean([first, last].filter(Boolean).join(" "), username || "Hodim");
 }
 
-function getGroupLeadEmployees(callback) {
+function getGroupLeadEmployeesFromEnv() {
   const fromEnv = clean(process.env.TELEGRAM_GROUP_LEADS_EMPLOYEES || process.env.TELEGRAM_EMPLOYEES, "");
-  const employees = fromEnv
+  return fromEnv
     .split(/[,;\n]+/)
     .map((item) => item.trim())
     .filter(Boolean);
-
-  return employees.length ? employees : [getCallbackUserName(callback)];
 }
 
-function buildGroupLeadEmployeeKeyboard(callback) {
-  const rows = getGroupLeadEmployees(callback).map((name, index) => ([
+async function getGroupLeadEmployees(callback) {
+  if (groupLeadEmployeesCache) {
+    return groupLeadEmployeesCache.length ? groupLeadEmployeesCache : [getCallbackUserName(callback)];
+  }
+
+  try {
+    const config = await getLatestGroupLeadsConfig();
+    const employees = Array.isArray(config?.employees) ? config.employees : [];
+    groupLeadEmployeesCache = employees.length ? employees : getGroupLeadEmployeesFromEnv();
+  } catch {
+    groupLeadEmployeesCache = getGroupLeadEmployeesFromEnv();
+  }
+
+  return groupLeadEmployeesCache.length ? groupLeadEmployeesCache : [getCallbackUserName(callback)];
+}
+
+async function buildGroupLeadEmployeeKeyboard(callback) {
+  const employees = await getGroupLeadEmployees(callback);
+  const rows = employees.map((name, index) => ([
     {
       text: name,
       callback_data: `${GROUP_LEAD_AGENT_CALLBACK_PREFIX}${index}`,
@@ -534,9 +573,9 @@ function buildGroupLeadEmployeeKeyboard(callback) {
   return { inline_keyboard: rows };
 }
 
-function getGroupLeadEmployeeByCallback(callback, data) {
+async function getGroupLeadEmployeeByCallback(callback, data) {
   const index = Number(String(data).replace(GROUP_LEAD_AGENT_CALLBACK_PREFIX, ""));
-  const employees = getGroupLeadEmployees(callback);
+  const employees = await getGroupLeadEmployees(callback);
   return employees[Number.isInteger(index) && index >= 0 ? index : 0] || getCallbackUserName(callback);
 }
 
@@ -634,10 +673,12 @@ function summarizeBayClubPrices(config) {
 function summarizeGroupLeadsConfig(config) {
   const groups = Array.isArray(config?.groups) ? config.groups : [];
   const keywords = Array.isArray(config?.keywords) ? config.keywords : [];
+  const employees = Array.isArray(config?.employees) ? config.employees : [];
   return [
     `Guruhlar: ${groups.length}`,
     groups.slice(0, 5).map((group) => `- ${clean(group.title, group.id)}`).join("\n"),
     `Kalit so'zlar: ${keywords.slice(0, 12).join(", ") || "-"}`,
+    `Hodimlar: ${employees.join(", ") || "-"}`,
   ].filter(Boolean).join("\n");
 }
 
@@ -831,6 +872,7 @@ function normalizeGroupLeadsConfig(config) {
     enabled: config?.enabled !== false,
     groups: Array.isArray(config?.groups) ? config.groups.filter((group) => group?.id) : [],
     keywords: Array.isArray(config?.keywords) ? config.keywords.map((item) => clean(item, "").toLowerCase()).filter(Boolean) : [],
+    employees: Array.isArray(config?.employees) ? config.employees.map((item) => clean(item, "")).filter(Boolean) : [],
   };
 }
 
@@ -852,6 +894,10 @@ function parseGroupListText(text) {
 
 function parseKeywordListText(text) {
   return [...new Set(parseListValue(text).map((item) => item.toLowerCase()).filter(Boolean))];
+}
+
+function parseEmployeeListText(text) {
+  return [...new Set(parseListValue(text).map((item) => clean(item, "")).filter(Boolean))];
 }
 
 async function getLatestGroupLeadsConfig() {
@@ -902,6 +948,7 @@ async function sendGroupLeadsSavedMessage(token, chatId, config, title = "Guruh 
       `<b>${escapeHtml(title)}</b>`,
       `Guruhlar: ${config.groups.length}`,
       `Kalit so'zlar: ${config.keywords.length}`,
+      `Hodimlar: ${config.employees.length}`,
       warnings.length ? "" : "Cron endpoint /api/group-leads-scan shu config bo'yicha guruhlarni tekshiradi.",
       ...warnings.map((warning) => `⚠️ ${warning}`),
     ].filter(Boolean).join("\n"),
@@ -990,6 +1037,34 @@ async function runGroupLeadsKeywordsUpdate(token, chatId, text) {
     await sendGroupLeadsSavedMessage(token, chatId, nextConfig, "Kalit so'zlar saqlandi");
   } catch (error) {
     await sendBotMessage(token, chatId, `Kalit so'zlarni saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
+  }
+}
+
+async function runGroupLeadsEmployeesUpdate(token, chatId, text) {
+  const employees = parseEmployeeListText(text);
+  if (employees.length === 0) {
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        "Hodimlar formati noto'g'ri.",
+        "",
+        "Namuna:",
+        "<code>Shoxruza, Sohibjon, Aziz</code>",
+      ].join("\n"),
+      { reply_markup: buildGroupLeadsKeyboard() }
+    );
+    return;
+  }
+
+  try {
+    const previousConfig = await getLatestGroupLeadsConfig();
+    const nextConfig = normalizeGroupLeadsConfig({ ...previousConfig, employees });
+    await saveGroupLeadsConfig(token, nextConfig);
+    groupLeadEmployeesCache = employees;
+    await sendGroupLeadsSavedMessage(token, chatId, nextConfig, "Hodimlar saqlandi");
+  } catch (error) {
+    await sendBotMessage(token, chatId, `Hodimlarni saqlashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`);
   }
 }
 
@@ -1229,14 +1304,14 @@ async function handleBotUpdate(body, token) {
         token,
         chatId,
         callback.message.message_id,
-        buildGroupLeadEmployeeKeyboard(callback)
+        await buildGroupLeadEmployeeKeyboard(callback)
       );
       return { ok: true };
     }
 
     if (data.startsWith(GROUP_LEAD_AGENT_CALLBACK_PREFIX)) {
       const leadData = extractGroupLeadData(callback.message?.text);
-      const employeeName = getGroupLeadEmployeeByCallback(callback, data);
+      const employeeName = await getGroupLeadEmployeeByCallback(callback, data);
       if (!leadData) {
         await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
         return { ok: true };
@@ -1394,12 +1469,22 @@ async function handleBotUpdate(body, token) {
     return { ok: true };
   }
 
+  if (replyText.includes(GROUP_LEADS_EMPLOYEES_REPLY_MARKER) && !text.startsWith("/")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await runGroupLeadsEmployeesUpdate(token, chatId, text);
+    return { ok: true };
+  }
+
   if ([
     BUTTON_PROMO,
     BUTTON_BAYCLUB_PRICES,
     BUTTON_GROUP_LEADS,
     BUTTON_GROUPS,
     BUTTON_KEYWORDS,
+    BUTTON_EMPLOYEES,
     BUTTON_RECENT_ACTIONS,
     BUTTON_LOGOUT,
   ].includes(text)) {
@@ -1418,6 +1503,8 @@ async function handleBotUpdate(body, token) {
       await sendGroupLeadsGroupsPrompt(token, chatId);
     } else if (text === BUTTON_KEYWORDS) {
       await sendGroupLeadsKeywordsPrompt(token, chatId);
+    } else if (text === BUTTON_EMPLOYEES) {
+      await sendGroupLeadsEmployeesPrompt(token, chatId);
     } else if (text === BUTTON_RECENT_ACTIONS) {
       await sendRecentAdminActions(token, chatId);
     } else if (text === BUTTON_LOGOUT) {
