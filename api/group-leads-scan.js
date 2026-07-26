@@ -1,5 +1,11 @@
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
+const DEFAULT_GROUP_LEAD_GROUPS = [
+  { id: "-1001382725545", title: "Союз" },
+  { id: "-1003546137685", title: "Levora B2B" },
+  { id: "-1001614487338", title: "Meridian World" },
+  { id: "-1001840866049", title: "Guides of Uzbekistan" },
+];
 const DEFAULT_GROUP_LEAD_KEYWORDS = [
   "tur kerak",
   "tur bormi",
@@ -251,6 +257,26 @@ function getLeadKeywords(config) {
   ];
 }
 
+function getLeadGroups(config) {
+  const groups = [
+    ...(Array.isArray(config?.groups) ? config.groups : []),
+    ...DEFAULT_GROUP_LEAD_GROUPS,
+  ];
+  const uniqueGroups = new Map();
+
+  for (const group of groups) {
+    const id = normalizeGroupIdInput(group?.id);
+    if (!id) continue;
+    uniqueGroups.set(id, {
+      ...group,
+      id,
+      title: clean(group?.title, id),
+    });
+  }
+
+  return [...uniqueGroups.values()];
+}
+
 function getScanWindowMinutes(config) {
   const parsed = Number(
     process.env.TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES ||
@@ -427,10 +453,11 @@ export default async function handler(req, res) {
   try {
     const result = await withAdminClient(async (client) => {
       const config = await readLatestMarker(client, GROUP_LEADS_CONFIG_MARKER);
-      if (!config?.enabled || !Array.isArray(config.groups)) {
+      if (config?.enabled === false) {
         return { scanned: 0, sent: 0, skipped: "config_missing" };
       }
 
+      const groups = getLeadGroups(config);
       const state = (await readLatestMarker(client, GROUP_LEADS_STATE_MARKER)) || {};
       const nextState = { ...state };
       const leadTopicId = getLeadTopicId();
@@ -439,7 +466,7 @@ export default async function handler(req, res) {
       let skippedOld = 0;
       const errors = [];
 
-      for (const group of config.groups) {
+      for (const group of groups) {
         try {
           const scan = await scanGroup(client, group, config, state);
           nextState[group.id] = scan.newestId;
@@ -468,7 +495,7 @@ export default async function handler(req, res) {
 
       await saveState(token, nextState);
       return {
-        scanned: config.groups.length,
+        scanned: groups.length,
         checked,
         skippedOld,
         sent,

@@ -32,6 +32,12 @@ const BUTTON_STATS = "📊 Statistika";
 const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
 const BUTTON_LOGOUT = "🚪 Chiqish";
 const BUTTON_BACK = "⬅️ Orqaga";
+const DEFAULT_GROUP_LEAD_GROUPS = [
+  { id: "-1001382725545", title: "Союз" },
+  { id: "-1003546137685", title: "Levora B2B" },
+  { id: "-1001614487338", title: "Meridian World" },
+  { id: "-1001840866049", title: "Guides of Uzbekistan" },
+];
 const DEFAULT_GROUP_LEAD_KEYWORD_COUNT = 100;
 const DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT = 30;
 const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
@@ -349,6 +355,7 @@ async function sendGroupLeadsMenu(token, chatId) {
       "<b>Guruh lidlari sozlamalari</b>",
       "",
       `Default algoritm: oxirgi 1 soatdagi eng so'nggi ${DEFAULT_GROUP_LEAD_MESSAGE_LIMIT} ta xabar tekshiriladi.`,
+      `Default guruhlar: ${DEFAULT_GROUP_LEAD_GROUPS.length} ta.`,
       `Default kalit so'zlar: ${DEFAULT_GROUP_LEAD_KEYWORD_COUNT} ta (${DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT} ta ruscha).`,
       "",
       "Guruhlarni, qo'shimcha kalit so'zlarni va hodimlarni alohida kiritish mumkin.",
@@ -824,7 +831,7 @@ function summarizeBayClubPrices(config) {
 }
 
 function summarizeGroupLeadsConfig(config) {
-  const groups = Array.isArray(config?.groups) ? config.groups : [];
+  const groups = mergeDefaultGroupLeadGroups(Array.isArray(config?.groups) ? config.groups : []);
   const keywords = Array.isArray(config?.keywords) ? config.keywords : [];
   const employees = Array.isArray(config?.employees) ? config.employees : [];
   return [
@@ -1183,6 +1190,20 @@ function normalizeGroupIdInput(groupId) {
   return value;
 }
 
+function mergeDefaultGroupLeadGroups(groups) {
+  const uniqueGroups = new Map();
+  for (const group of [...(Array.isArray(groups) ? groups : []), ...DEFAULT_GROUP_LEAD_GROUPS]) {
+    const id = normalizeGroupIdInput(group?.id);
+    if (!id) continue;
+    uniqueGroups.set(id, {
+      ...group,
+      id,
+      title: clean(group?.title, id),
+    });
+  }
+  return [...uniqueGroups.values()];
+}
+
 function parseGroupLine(line) {
   const [rawId, rawTitle] = line.split("=").map((item) => item.trim());
   if (!rawId) return null;
@@ -1252,7 +1273,7 @@ function normalizeGroupLeadsConfig(config) {
   const scanWindowMinutes = Number(config?.scanWindowMinutes);
   return {
     enabled: config?.enabled !== false,
-    groups: Array.isArray(config?.groups) ? config.groups.filter((group) => group?.id) : [],
+    groups: mergeDefaultGroupLeadGroups(Array.isArray(config?.groups) ? config.groups.filter((group) => group?.id) : []),
     keywords: Array.isArray(config?.keywords) ? config.keywords.map((item) => clean(item, "").toLowerCase()).filter(Boolean) : [],
     employees: Array.isArray(config?.employees) ? config.employees.map((item) => clean(item, "")).filter(Boolean) : [],
     scanWindowMinutes: Number.isFinite(scanWindowMinutes) && scanWindowMinutes > 0
@@ -1332,6 +1353,7 @@ async function sendGroupLeadsSavedMessage(token, chatId, config, title = "Guruh 
     [
       `<b>${escapeHtml(title)}</b>`,
       `Guruhlar: ${config.groups.length}`,
+      `Default guruhlar: ${DEFAULT_GROUP_LEAD_GROUPS.length}`,
       `Qo'shimcha kalit so'zlar: ${config.keywords.length}`,
       `Default kalit so'zlar: ${DEFAULT_GROUP_LEAD_KEYWORD_COUNT} ta (${DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT} ta ruscha)`,
       `Scan oynasi: ${config.scanWindowMinutes || DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES} daqiqa`,
@@ -2295,6 +2317,8 @@ export default async function handler(req, res) {
       groupLeadDefaults: {
         scanWindowMinutes: DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES,
         messageLimit: DEFAULT_GROUP_LEAD_MESSAGE_LIMIT,
+        groupCount: DEFAULT_GROUP_LEAD_GROUPS.length,
+        groups: DEFAULT_GROUP_LEAD_GROUPS,
         keywordCount: DEFAULT_GROUP_LEAD_KEYWORD_COUNT,
         russianKeywordCount: DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT,
       },

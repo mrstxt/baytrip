@@ -302,6 +302,15 @@ Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar a
 
 `🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 10 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tashlaydi. Tezkor command sifatida `/scan` ham ishlaydi.
 
+Default kuzatiladigan guruhlar:
+
+```text
+-1001382725545=Союз
+-1003546137685=Levora B2B
+-1001614487338=Meridian World
+-1001840866049=Guides of Uzbekistan
+```
+
 `👥 Guruhlarni sozlash` uchun format:
 
 ```text
