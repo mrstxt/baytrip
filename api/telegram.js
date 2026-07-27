@@ -262,6 +262,15 @@ async function deleteBotMessage(token, chatId, messageId) {
   return data;
 }
 
+async function deleteChatMessages(token, chatId, messageIds = []) {
+  const uniqueIds = [...new Set(messageIds.filter(Boolean))];
+  const results = [];
+  for (const messageId of uniqueIds) {
+    results.push(await deleteBotMessage(token, chatId, messageId));
+  }
+  return results;
+}
+
 function buildAdminPanelKeyboard() {
   return {
     keyboard: [
@@ -2061,12 +2070,17 @@ async function handleBotUpdate(body, token, context = {}) {
   const replyText = clean(message.reply_to_message?.text, "");
   if (replyText.includes(LOGIN_REPLY_MARKER) && !text.startsWith("/")) {
     const login = text.trim();
+    await deleteChatMessages(token, chatId, [
+      message.message_id,
+      message.reply_to_message?.message_id,
+    ]);
     await sendBotMessage(
       token,
       chatId,
       [
         PASSWORD_REPLY_MARKER,
-        `Login: <code>${escapeHtml(login)}</code>`,
+        "Login qabul qilindi.",
+        `<code>LOGIN_VALUE:${escapeHtml(login)}</code>`,
         "",
         "Endi parolni shu xabarga reply qilib yuboring.",
       ].join("\n"),
@@ -2081,13 +2095,18 @@ async function handleBotUpdate(body, token, context = {}) {
   }
 
   if (replyText.includes(PASSWORD_REPLY_MARKER) && !text.startsWith("/")) {
-    const login = clean(replyText.match(/Login:\s*([^\s<]+)/)?.[1], "");
+    const login = clean(replyText.match(/LOGIN_VALUE:\s*([^\s<]+)/)?.[1], "");
     const password = text.trim();
+    await deleteChatMessages(token, chatId, [
+      message.message_id,
+      message.reply_to_message?.message_id,
+    ]);
     if (!getBroadcastPassword()) {
       await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
     } else if (!isAllowedAdmin(message)) {
       await sendBotMessage(token, chatId, buildAdminDeniedText(message));
     } else if (login === getAdminLogin() && password === getBroadcastPassword()) {
+      await sendBotMessage(token, chatId, "Xush kelibsiz.");
       await sendAdminPanel(token, chatId);
     } else {
       await sendBotMessage(token, chatId, "Login yoki parol noto'g'ri. Qayta kirish: <code>/login</code>");
@@ -2187,6 +2206,7 @@ async function handleBotUpdate(body, token, context = {}) {
     } else if (text === BUTTON_RECENT_ACTIONS) {
       await sendRecentAdminActions(token, chatId);
     } else if (text === BUTTON_CLEANUP) {
+      await deleteBotMessage(token, chatId, message.message_id);
       await runBotMessageCleanup(token, chatId);
     } else if (text === BUTTON_LOGOUT) {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
