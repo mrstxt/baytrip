@@ -32,6 +32,7 @@ const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
 const BUTTON_STATS = "📊 Statistika";
 const BUTTON_RECENT_ACTIONS = "🧾 Oxirgi amallar";
+const BUTTON_CLEANUP = "🧹 Xabarlarni tozalash";
 const BUTTON_LOGOUT = "🚪 Chiqish";
 const BUTTON_BACK = "⬅️ Orqaga";
 const DEFAULT_GROUP_LEAD_GROUPS = [
@@ -267,6 +268,7 @@ function buildAdminPanelKeyboard() {
       [{ text: BUTTON_PROMO }, { text: BUTTON_BAYCLUB_PRICES }],
       [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_LEAD_SCANNER }],
       [{ text: BUTTON_STATS }, { text: BUTTON_RECENT_ACTIONS }],
+      [{ text: BUTTON_CLEANUP }],
       [{ text: BUTTON_LOGOUT }],
     ],
     resize_keyboard: true,
@@ -306,6 +308,7 @@ async function sendAdminPanel(token, chatId) {
       "🧭 Lid skaner: hoziroq test scan qilish",
       "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
+      "🧹 Bot yozgan yordamchi xabarlarni tozalash",
     ].join("\n"),
     { reply_markup: buildAdminPanelKeyboard() }
   );
@@ -1194,6 +1197,130 @@ async function sendRecentAdminActions(token, chatId) {
   }
 }
 
+async function getBotProfile(token) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.description || "Bot profili olinmadi.");
+  }
+  return data.result;
+}
+
+function getBotCleanupTopicIds() {
+  return [
+    getTopicId("external-tour"),
+    getTopicId("domestic-tour"),
+    getTopicId("bayclub-card"),
+    getTopicId("promo-subscribe"),
+    getTopicId("contact"),
+    process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID ? Number(process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID) : undefined,
+    getGroupLeadsConfigTopicId(),
+    getBayClubConfigTopicId(),
+  ]
+    .filter((value) => Number.isFinite(value))
+    .filter((value, index, values) => values.indexOf(value) === index);
+}
+
+function isPersistentBotMemoryMessage(text) {
+  const raw = String(text ?? "");
+  return [
+    PRICE_CONFIG_MARKER,
+    GROUP_LEADS_CONFIG_MARKER,
+    GROUP_LEADS_STATE_MARKER,
+    GROUP_LEAD_FEEDBACK_MARKER,
+  ].some((marker) => raw.includes(marker));
+}
+
+function isMessageFromBot(message, botProfile) {
+  const sender = message?.sender;
+  const senderId = sender?.id?.value ?? sender?.id;
+  const botId = botProfile?.id ? String(botProfile.id) : "";
+  const senderUsername = normalizeTelegramUsername(sender?.username);
+  const botUsername = normalizeTelegramUsername(botProfile?.username);
+  return Boolean(
+    (botId && String(senderId) === botId) ||
+    (botUsername && senderUsername.toLowerCase() === botUsername.toLowerCase())
+  );
+}
+
+async function cleanupBotMessages(token) {
+  const botProfile = await getBotProfile(token);
+  const topicIds = getBotCleanupTopicIds();
+  if (topicIds.length === 0) {
+    throw new Error("Tozalash uchun topic ID topilmadi.");
+  }
+
+  const scanLimit = Number(process.env.TELEGRAM_BOT_CLEANUP_SCAN_LIMIT || 200);
+  const limit = Number.isFinite(scanLimit) && scanLimit > 0 ? scanLimit : 200;
+
+  return withAdminClient(async (client) => {
+    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const results = [];
+    let totalChecked = 0;
+    let totalDeleted = 0;
+    let totalKeptMemory = 0;
+
+    for (const topicId of topicIds) {
+      const deleteIds = [];
+      let checked = 0;
+      let keptMemory = 0;
+      const iterator = client.iterMessages(entity, { limit, replyTo: topicId });
+
+      for await (const message of iterator) {
+        checked += 1;
+        totalChecked += 1;
+        if (!isMessageFromBot(message, botProfile)) continue;
+
+        if (isPersistentBotMemoryMessage(message.message)) {
+          keptMemory += 1;
+          totalKeptMemory += 1;
+          continue;
+        }
+
+        if (message.id) deleteIds.push(message.id);
+      }
+
+      if (deleteIds.length) {
+        await client.deleteMessages(entity, deleteIds, { revoke: true });
+        totalDeleted += deleteIds.length;
+      }
+
+      results.push({ topicId, checked, deleted: deleteIds.length, keptMemory });
+    }
+
+    return { topicCount: topicIds.length, checked: totalChecked, deleted: totalDeleted, keptMemory: totalKeptMemory, results };
+  });
+}
+
+function buildCleanupResultMessage(result) {
+  return [
+    "<b>🧹 Xabarlarni tozalash yakunlandi</b>",
+    "",
+    `Topiclar: <b>${escapeHtml(result.topicCount ?? 0)}</b>`,
+    `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
+    `O'chirilgan bot xabarlari: <b>${escapeHtml(result.deleted ?? 0)}</b>`,
+    `Saqlangan xotira/config xabarlari: <b>${escapeHtml(result.keptMemory ?? 0)}</b>`,
+  ].join("\n");
+}
+
+async function runBotMessageCleanup(token, chatId) {
+  await sendBotMessage(token, chatId, "🧹 Tozalash boshlandi. Bot yozgan yordamchi xabarlar tekshirilmoqda...");
+
+  try {
+    const result = await cleanupBotMessages(token);
+    await sendBotMessage(token, chatId, buildCleanupResultMessage(result), {
+      reply_markup: buildAdminPanelKeyboard(),
+    });
+  } catch (error) {
+    await sendBotMessage(
+      token,
+      chatId,
+      `Tozalashda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+      { reply_markup: buildAdminPanelKeyboard() }
+    );
+  }
+}
+
 function getCronSecret() {
   return clean(process.env.CRON_SECRET || process.env.TELEGRAM_GROUP_LEADS_CRON_SECRET, "");
 }
@@ -2032,6 +2159,7 @@ async function handleBotUpdate(body, token, context = {}) {
     BUTTON_EMPLOYEES,
     BUTTON_STATS,
     BUTTON_RECENT_ACTIONS,
+    BUTTON_CLEANUP,
     BUTTON_LOGOUT,
     BUTTON_BACK,
   ].includes(text)) {
@@ -2058,6 +2186,8 @@ async function handleBotUpdate(body, token, context = {}) {
       await sendLeadStats(token, chatId);
     } else if (text === BUTTON_RECENT_ACTIONS) {
       await sendRecentAdminActions(token, chatId);
+    } else if (text === BUTTON_CLEANUP) {
+      await runBotMessageCleanup(token, chatId);
     } else if (text === BUTTON_LOGOUT) {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
         reply_markup: buildRemoveKeyboard(),
