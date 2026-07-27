@@ -402,6 +402,24 @@ function buildLeadApprovalKeyboard() {
   };
 }
 
+function buildScanSummaryText(result) {
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  return [
+    "<b>🧭 Lid skaner yakunlandi</b>",
+    "",
+    `Guruhlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
+    `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
+    `Topicga tashlangan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
+    `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
+    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
+    `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
+    `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
+    errors.length ? "" : "",
+    errors.length ? "<b>Xatolar:</b>" : "",
+    ...errors.slice(0, 5).map((item) => `${escapeHtml(item.group)}: ${escapeHtml(item.error)}`),
+  ].filter(Boolean).join("\n");
+}
+
 function tokenizeLeadText(value) {
   const stopWords = new Set([
     "kerak", "bormi", "bor", "ekan", "uchun", "bilan", "qilib", "qiladi", "qanaqa",
@@ -513,14 +531,13 @@ async function readRecentFeedback(client) {
   return feedback;
 }
 
-async function saveState(token, state) {
+async function saveState(token, state, scanResult = null) {
   const chatId = clean(process.env.TELEGRAM_CHAT_ID);
   const topicId = getConfigTopicId();
-  const text = [
-    `<b>${GROUP_LEADS_STATE_MARKER}</b>`,
-    "",
-    `<code>${escapeHtml(JSON.stringify(state))}</code>`,
-  ].join("\n");
+  const lines = scanResult
+    ? [buildScanSummaryText(scanResult), "", `<b>${GROUP_LEADS_STATE_MARKER}</b>`, "", `<code>${escapeHtml(JSON.stringify(state))}</code>`]
+    : [`<b>${GROUP_LEADS_STATE_MARKER}</b>`, "", `<code>${escapeHtml(JSON.stringify(state))}</code>`];
+  const text = lines.join("\n");
 
   await sendBotMessage(token, chatId, text, topicId ? { message_thread_id: topicId } : {});
 }
@@ -642,8 +659,7 @@ export default async function handler(req, res) {
         }
       }
 
-      await saveState(token, nextState);
-      return {
+      const scanResult = {
         scanned: groups.length,
         checked,
         skippedOld,
@@ -655,6 +671,8 @@ export default async function handler(req, res) {
         canceledMemory: learningProfile.canceledCount,
         errors,
       };
+      await saveState(token, nextState, scanResult);
+      return scanResult;
     });
 
     return res.status(200).json({ ok: true, ...result });

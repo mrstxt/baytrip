@@ -798,12 +798,20 @@ async function saveLeadFeedback(token, leadData, status, callback, extra = {}) {
     actedBy: getCallbackUserName(callback),
     actedAt: new Date().toISOString(),
   };
+  const statusLabel = status === "approved" ? "Tasdiqlandi" : status === "canceled" ? "Bekor qilindi" : status;
 
   const text = [
+    `<b>🧠 Guruh lid xotirasi: ${escapeHtml(statusLabel)}</b>`,
+    "",
+    `👥 <b>Guruh:</b> ${escapeHtml(clean(feedback.groupTitle || feedback.groupId, "-"))}`,
+    `👤 <b>Hodim:</b> ${escapeHtml(clean(feedback.employee || feedback.actedBy, "-"))}`,
+    `💬 <b>Xabar:</b> ${escapeHtml(clean(feedback.message, "-").slice(0, 240))}`,
+    feedback.link ? `🔗 <b>Asl xabar:</b> ${escapeHtml(feedback.link)}` : "",
+    "",
     `<b>${GROUP_LEAD_FEEDBACK_MARKER}</b>`,
     "",
     `<code>${escapeHtml(JSON.stringify(feedback))}</code>`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   await sendBotMessage(token, chatId, text, { message_thread_id: topicId });
 }
