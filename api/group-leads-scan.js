@@ -1,6 +1,5 @@
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
-const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
 const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
 const DEFAULT_GROUP_LEAD_GROUPS = [
   { id: "-1001382725545", title: "Союз" },
@@ -316,10 +315,6 @@ function getSenderLabel(message) {
   return username ? `${name} (@${username})` : name;
 }
 
-function getSenderUsername(message) {
-  return clean(message?.sender?.username, "").replace(/^@+/, "");
-}
-
 function getMessageLink(groupId, messageId) {
   const value = normalizeGroupIdInput(groupId);
   if (value.startsWith("@")) return `https://t.me/${value.slice(1)}/${messageId}`;
@@ -346,30 +341,10 @@ function formatDate(date) {
   }).format(date instanceof Date ? date : new Date());
 }
 
-function buildLeadData({ group, message, matchedKeywords, score, reasons }) {
-  const link = getMessageLink(group.id, message.id);
-  const sender = getSenderLabel(message);
-  return {
-    source: "group-lead",
-    groupId: group.id,
-    groupTitle: clean(group.title, group.id),
-    messageId: message.id,
-    username: getSenderUsername(message),
-    sender,
-    message: clean(message.message),
-    matchedKeywords,
-    link,
-    score,
-    reasons,
-    createdAt: new Date().toISOString(),
-  };
-}
-
 function buildLeadText(lead) {
   const { group, message, matchedKeywords, score, reasons } = lead;
-  const leadData = buildLeadData(lead);
-  const link = leadData.link;
-  const sender = leadData.sender;
+  const link = getMessageLink(group.id, message.id);
+  const sender = getSenderLabel(message);
   const lines = [
     "<b>🔎 Guruhdan yangi lid</b>",
     "",
@@ -385,8 +360,6 @@ function buildLeadText(lead) {
   if (link) {
     lines.push(`🔗 <b>Asl xabar:</b> ${escapeHtml(link)}`);
   }
-
-  lines.push("", `<code>${escapeHtml(`${GROUP_LEAD_DATA_MARKER} ${JSON.stringify(leadData)}`)}</code>`);
 
   return lines.join("\n");
 }
@@ -507,7 +480,6 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
     reasons: [
       matchedKeywords.length ? "kalit so'z" : "",
       approvedHits.length ? `tasdiqlanganlarga o'xshash: ${approvedHits.slice(0, 3).join(", ")}` : "",
-      canceledHits.length ? `bekor qilinganlarga o'xshash: ${canceledHits.slice(0, 3).join(", ")}` : "",
     ].filter(Boolean),
   };
 }

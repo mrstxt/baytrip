@@ -47,6 +47,7 @@ const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
 const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 30;
 
 let groupLeadEmployeesCache = null;
+const pendingAdminLogins = new Map();
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -711,7 +712,7 @@ function extractApprovalLeadData(text) {
   }
 
   const username = normalizeTelegramUsername(rawText.match(/@([a-zA-Z0-9_]{5,32})/)?.[1]);
-  const messageText = extractLeadLineValue(rawText, "Xabar");
+  const messageText = extractLeadBlockValue(rawText, "Xabar") || extractLeadLineValue(rawText, "Xabar");
 
   if (rawText.includes("Guruhdan yangi lid") || rawText.includes("Kim yozdi:")) {
     return {
@@ -745,6 +746,23 @@ function extractLeadLineValue(text, label) {
     .find((item) => item.includes(`${label}:`));
   if (!line) return "";
   return clean(line.slice(line.indexOf(`${label}:`) + label.length + 1), "");
+}
+
+function extractLeadBlockValue(text, label) {
+  const lines = String(text ?? "").split("\n");
+  const startIndex = lines.findIndex((item) => item.includes(`${label}:`));
+  if (startIndex < 0) return "";
+
+  const firstLine = lines[startIndex];
+  const values = [firstLine.slice(firstLine.indexOf(`${label}:`) + label.length + 1)];
+  const nextLabelPattern = /^\s*[^\w\s<]*\s*(Kim yozdi|Qaysi guruh|Kalit so'z|Tahlil balli|Vaqt|Asl xabar|Telegram|Mijoz|Telefon|Manba):/i;
+
+  for (const line of lines.slice(startIndex + 1)) {
+    if (nextLabelPattern.test(line)) break;
+    values.push(line);
+  }
+
+  return clean(values.join("\n"), "");
 }
 
 function stripLeadDataMarkers(text) {
@@ -2070,6 +2088,10 @@ async function handleBotUpdate(body, token, context = {}) {
   const replyText = clean(message.reply_to_message?.text, "");
   if (replyText.includes(LOGIN_REPLY_MARKER) && !text.startsWith("/")) {
     const login = text.trim();
+    pendingAdminLogins.set(String(chatId), {
+      login,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
     await deleteChatMessages(token, chatId, [
       message.message_id,
       message.reply_to_message?.message_id,
@@ -2080,7 +2102,6 @@ async function handleBotUpdate(body, token, context = {}) {
       [
         PASSWORD_REPLY_MARKER,
         "Login qabul qilindi.",
-        `<code>LOGIN_VALUE:${escapeHtml(login)}</code>`,
         "",
         "Endi parolni shu xabarga reply qilib yuboring.",
       ].join("\n"),
@@ -2095,7 +2116,9 @@ async function handleBotUpdate(body, token, context = {}) {
   }
 
   if (replyText.includes(PASSWORD_REPLY_MARKER) && !text.startsWith("/")) {
-    const login = clean(replyText.match(/LOGIN_VALUE:\s*([^\s<]+)/)?.[1], "");
+    const pendingLogin = pendingAdminLogins.get(String(chatId));
+    pendingAdminLogins.delete(String(chatId));
+    const login = pendingLogin?.expiresAt > Date.now() ? clean(pendingLogin.login, "") : "";
     const password = text.trim();
     await deleteChatMessages(token, chatId, [
       message.message_id,
@@ -2103,6 +2126,8 @@ async function handleBotUpdate(body, token, context = {}) {
     ]);
     if (!getBroadcastPassword()) {
       await sendBotMessage(token, chatId, "TELEGRAM_BROADCAST_PASSWORD Vercel env ichida kiritilmagan.");
+    } else if (!login) {
+      await sendBotMessage(token, chatId, "Login sessiyasi tugadi. Qayta kirish: <code>/login</code>");
     } else if (!isAllowedAdmin(message)) {
       await sendBotMessage(token, chatId, buildAdminDeniedText(message));
     } else if (login === getAdminLogin() && password === getBroadcastPassword()) {
@@ -2512,19 +2537,6 @@ function buildMessage(body, profileDelivery) {
     `🔎 <b>Manba:</b> ${escapeHtml(source)}`,
     `🕒 <b>Vaqt:</b> ${escapeHtml(createdAt)}`
   );
-
-  if (body.type === "contact") {
-    lines.push(
-      "",
-      `<code>${escapeHtml(`${SITE_LEAD_DATA_MARKER} ${JSON.stringify({
-        source: "site-contact",
-        username: normalizeTelegramUsername(body.telegramUsername),
-        sender: clean(body.name, "Mijoz"),
-        message: clean(body.message, ""),
-        createdAt: new Date().toISOString(),
-      })}`)}</code>`
-    );
-  }
 
   return lines.join("\n");
 }
