@@ -19,7 +19,9 @@ const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
 const SITE_LEAD_DATA_MARKER = "SITE_LEAD_DATA";
+const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
 const GROUP_LEAD_CONFIRM_CALLBACK = "gl_confirm";
+const GROUP_LEAD_CANCEL_CALLBACK = "gl_cancel";
 const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
 const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
@@ -41,7 +43,7 @@ const DEFAULT_GROUP_LEAD_GROUPS = [
 const DEFAULT_GROUP_LEAD_KEYWORD_COUNT = 100;
 const DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT = 30;
 const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
-const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 10;
+const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 30;
 
 let groupLeadEmployeesCache = null;
 
@@ -278,7 +280,7 @@ async function sendAdminPanel(token, chatId) {
       "Mavjud bo'limlar:",
       "📣 Aksiyalar obunachilariga xabar yuborish",
       "💳 BayClub tarif narxlarini o'zgartirish",
-      "🔎 Guruh lidlari: 1 soat, oxirgi 10 xabar, 100 ta default kalit so'z",
+      "🔎 Guruh lidlari: 1 soat, oxirgi 30 xabar, 100 ta default kalit so'z",
       "🧭 Lid skaner: hoziroq test scan qilish",
       "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
@@ -631,7 +633,10 @@ async function buildGroupLeadEmployeeKeyboard(callback) {
 function buildLeadApprovalKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: "✅ Tasdiqlash", callback_data: GROUP_LEAD_CONFIRM_CALLBACK }],
+      [
+        { text: "✅ Tasdiqlash", callback_data: GROUP_LEAD_CONFIRM_CALLBACK },
+        { text: "❌ Bekor", callback_data: GROUP_LEAD_CANCEL_CALLBACK },
+      ],
     ],
   };
 }
@@ -647,6 +652,7 @@ function extractApprovalLeadData(text) {
   const siteLead = parseMarkerJson(text, SITE_LEAD_DATA_MARKER);
   if (siteLead && typeof siteLead === "object") {
     return {
+      ...siteLead,
       source: "site-contact",
       username: normalizeTelegramUsername(siteLead.username),
       sender: clean(siteLead.sender, "Mijoz"),
@@ -659,6 +665,7 @@ function extractApprovalLeadData(text) {
   const parsed = parseMarkerJson(text, GROUP_LEAD_DATA_MARKER);
   if (parsed && typeof parsed === "object") {
     return {
+      ...parsed,
       source: "group-lead",
       username: normalizeTelegramUsername(parsed.username),
       sender: clean(parsed.sender, "Mijoz"),
@@ -737,6 +744,46 @@ function buildApprovedLeadEditedText(originalText, employeeName, result) {
     "",
     `👤 Hodim: ${employeeName}`,
   ].join("\n");
+}
+
+function buildCanceledLeadEditedText(originalText, employeeName) {
+  const cleaned = stripLeadDataMarkers(originalText);
+  return [
+    cleaned,
+    "",
+    `❌ Status: Bekor qilindi`,
+    `👤 Bekor qilgan: ${employeeName}`,
+  ].join("\n");
+}
+
+async function saveLeadFeedback(token, leadData, status, callback, extra = {}) {
+  const chatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const topicId = getGroupLeadsConfigTopicId();
+  if (!chatId || !topicId) return;
+
+  const feedback = {
+    status,
+    source: clean(leadData?.source, "group-lead"),
+    groupId: clean(leadData?.groupId, ""),
+    groupTitle: clean(leadData?.groupTitle, ""),
+    messageId: leadData?.messageId || null,
+    username: normalizeTelegramUsername(leadData?.username),
+    sender: clean(leadData?.sender, ""),
+    message: clean(leadData?.message, ""),
+    matchedKeywords: Array.isArray(leadData?.matchedKeywords) ? leadData.matchedKeywords : [],
+    link: clean(leadData?.link, ""),
+    employee: clean(extra.employeeName, getCallbackUserName(callback)),
+    actedBy: getCallbackUserName(callback),
+    actedAt: new Date().toISOString(),
+  };
+
+  const text = [
+    `<b>${GROUP_LEAD_FEEDBACK_MARKER}</b>`,
+    "",
+    `<code>${escapeHtml(JSON.stringify(feedback))}</code>`,
+  ].join("\n");
+
+  await sendBotMessage(token, chatId, text, { message_thread_id: topicId });
 }
 
 function titleCaseUz(value) {
@@ -847,6 +894,16 @@ function summarizeGroupLeadsState(state) {
   return entries.length ? `Kuzatilayotgan guruh state: ${entries.length} ta guruh` : "State bo'sh";
 }
 
+function summarizeGroupLeadFeedback(feedback) {
+  const status = feedback?.status === "approved" ? "Tasdiqlandi" : feedback?.status === "canceled" ? "Bekor qilindi" : clean(feedback?.status, "-");
+  return [
+    `Status: ${status}`,
+    `Guruh: ${clean(feedback?.groupTitle || feedback?.groupId, "-")}`,
+    `Hodim: ${clean(feedback?.employee || feedback?.actedBy, "-")}`,
+    `Xabar: ${clean(feedback?.message, "-").slice(0, 140)}`,
+  ].join("\n");
+}
+
 function parseActionMessage(message) {
   const text = clean(message.message, "");
   const knownMarkers = [
@@ -864,6 +921,11 @@ function parseActionMessage(message) {
       marker: GROUP_LEADS_STATE_MARKER,
       title: "Guruh lid scan state yangilandi",
       summary: summarizeGroupLeadsState,
+    },
+    {
+      marker: GROUP_LEAD_FEEDBACK_MARKER,
+      title: "Guruh lid xotirasi yangilandi",
+      summary: summarizeGroupLeadFeedback,
     },
   ];
 
@@ -1126,8 +1188,9 @@ function buildLeadScannerResultMessage(result) {
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
     `Topicga tashlangan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
-    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 10)} xabar</b>`,
+    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
+    `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
     errors.length ? "" : "",
     errors.length ? "<b>Xatolar:</b>" : "",
     ...errors.slice(0, 5).map((item) => `${escapeHtml(item.group)}: ${escapeHtml(item.error)}`),
@@ -1148,8 +1211,8 @@ async function runLeadScannerNow(token, chatId, baseUrl) {
     [
       "<b>🧭 Lid skaner boshlandi</b>",
       "",
-      "Har bir sozlangan guruhdan oxirgi 10 ta xabar tekshiriladi.",
-      "Oxirgi 1 soat ichida kalit so'zga mos lid bo'lsa, belgilangan topicga tashlanadi.",
+      "Har bir sozlangan guruhdan oxirgi 30 ta xabar tekshiriladi.",
+      "Oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa, belgilangan topicga tashlanadi.",
     ].join("\n")
   );
 
@@ -1718,6 +1781,30 @@ async function handleBotUpdate(body, token, context = {}) {
       return { ok: true };
     }
 
+    if (data === GROUP_LEAD_CANCEL_CALLBACK) {
+      const leadData = extractApprovalLeadData(callback.message?.text);
+      if (!leadData) {
+        await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
+        return { ok: true };
+      }
+
+      const employeeName = getCallbackUserName(callback);
+      await saveLeadFeedback(token, leadData, "canceled", callback, { employeeName }).catch((error) => {
+        console.error("group lead feedback save failed", {
+          status: "canceled",
+          error: error instanceof Error ? error.message : error,
+        });
+      });
+      await editBotMessageText(
+        token,
+        chatId,
+        callback.message.message_id,
+        buildCanceledLeadEditedText(callback.message?.text, employeeName),
+        { reply_markup: { inline_keyboard: [] } }
+      );
+      return { ok: true };
+    }
+
     if (data.startsWith(GROUP_LEAD_AGENT_CALLBACK_PREFIX)) {
       const leadData = extractApprovalLeadData(callback.message?.text);
       const employeeName = await getGroupLeadEmployeeByCallback(callback, data);
@@ -1728,6 +1815,12 @@ async function handleBotUpdate(body, token, context = {}) {
 
       try {
         const result = await sendApprovedLeadGreetingToClient(leadData, employeeName);
+        await saveLeadFeedback(token, leadData, "approved", callback, { employeeName }).catch((error) => {
+          console.error("group lead feedback save failed", {
+            status: "approved",
+            error: error instanceof Error ? error.message : error,
+          });
+        });
         await editBotMessageText(
           token,
           chatId,
@@ -2221,6 +2314,19 @@ function buildMessage(body, profileDelivery) {
     `🔎 <b>Manba:</b> ${escapeHtml(source)}`,
     `🕒 <b>Vaqt:</b> ${escapeHtml(createdAt)}`
   );
+
+  if (body.type === "contact") {
+    lines.push(
+      "",
+      `<code>${escapeHtml(`${SITE_LEAD_DATA_MARKER} ${JSON.stringify({
+        source: "site-contact",
+        username: normalizeTelegramUsername(body.telegramUsername),
+        sender: clean(body.name, "Mijoz"),
+        message: clean(body.message, ""),
+        createdAt: new Date().toISOString(),
+      })}`)}</code>`
+    );
+  }
 
   return lines.join("\n");
 }

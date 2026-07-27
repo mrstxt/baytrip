@@ -117,9 +117,10 @@ Qo'shimcha sozlamalar:
 
 ```env
 TELEGRAM_PROMO_SCAN_LIMIT=500
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=10
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=30
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
 TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
+TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT=250
 TELEGRAM_LEAD_STATS_SCAN_LIMIT=300
 TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT=80
 TELEGRAM_ADMIN_ACTIONS_LIMIT=8
@@ -296,11 +297,11 @@ Tezkor command:
 
 ## Guruhlardan lid yig'ish
 
-Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 10 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
+Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 30 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z yoki tasdiqlangan lidlarga o'xshash belgilar topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
 Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar alohida sozlanadi.
 
-`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 10 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tashlaydi. Tezkor command sifatida `/scan` ham ishlaydi.
+`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 30 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tashlaydi. Tezkor command sifatida `/scan` ham ishlaydi.
 
 Default kuzatiladigan guruhlar:
 
@@ -326,7 +327,7 @@ tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi
 
 Guruh chap tomonda public username yoki `-100...` ID bo'ladi. `=` dan keyingi qism ichki lid xabarida ko'rinadigan nom.
 
-Guruhdan lid topilganda mijozga avtomatik xabar ketmaydi. Lid avval ichki topicga `✅ Tasdiqlash` tugmasi bilan tushadi. Hodim tasdiqlashni bosadi, o'z ismini tanlaydi, shundan keyin profil session orqali mijoz username'iga birinchi xabar yuboriladi.
+Guruhdan lid topilganda mijozga avtomatik xabar ketmaydi. Lid avval ichki topicga `✅ Tasdiqlash` va `❌ Bekor` tugmalari bilan tushadi. Hodim tasdiqlashni bosadi, o'z ismini tanlaydi, shundan keyin profil session orqali mijoz username'iga birinchi xabar yuboriladi. Tasdiqlangan va bekor qilingan lidlar config topicga `GROUP_LEAD_FEEDBACK` sifatida yoziladi; keyingi scanlar shu xotiradan foydalanib tasdiqlanganlarga o'xshash xabarlarni ko'proq lid qiladi va bekor qilinganlarga o'xshashlarini pasaytiradi.
 
 `👤 Hodimlar` uchun format:
 
@@ -348,7 +349,7 @@ Lidlar tushadigan topic:
 TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlari topic ID>
 ```
 
-Config va scan state topic:
+Config, scan state va lid xotirasi topic:
 
 ```env
 TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<Sozlamalar topic ID>
@@ -360,20 +361,20 @@ Vercel cron endpoint:
 /api/group-leads-scan
 ```
 
-`vercel.json` default holatda deploy yiqilmasligi uchun cronni kuniga 1 marta ishga tushiradi:
+`vercel.json` default holatda cronni har soatda ishga tushiradi:
 
 ```json
 {
   "crons": [
     {
       "path": "/api/group-leads-scan",
-      "schedule": "0 5 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
 ```
 
-Har 1 soatda scan kerak bo'lsa, Vercel Pro plan yoki tashqi cron service ishlating. Tashqi cron `/api/group-leads-scan` endpointini har 1 soatda chaqirishi mumkin.
+Vercel planingiz soatlik cronni qo'llamasa, tashqi cron service `/api/group-leads-scan` endpointini har 1 soatda chaqirishi mumkin.
 
 Manual test:
 
@@ -387,13 +388,14 @@ Agar `CRON_SECRET` qo'yilgan bo'lsa:
 curl "https://<VERCEL_DOMAIN>/api/group-leads-scan?secret=<CRON_SECRET>"
 ```
 
-Birinchi scan ham oxirgi 1 soatdagi eng so'nggi 10 ta xabarni tekshiradi. Keyingi scanlarda state orqali oldin ko'rilgan xabarlar takror yuborilmaydi.
+Birinchi scan ham oxirgi 1 soatdagi eng so'nggi 30 ta xabarni tekshiradi. Keyingi scanlarda state orqali oldin ko'rilgan xabarlar takror yuborilmaydi.
 
 Default qiymatlar:
 
 ```env
 TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES=60
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=10
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=30
+TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT=250
 ```
 
 Eski tarixni ham scan qilish kerak bo'lsa:

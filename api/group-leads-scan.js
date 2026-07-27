@@ -1,5 +1,7 @@
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
+const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
+const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
 const DEFAULT_GROUP_LEAD_GROUPS = [
   { id: "-1001382725545", title: "Союз" },
   { id: "-1003546137685", title: "Levora B2B" },
@@ -287,8 +289,8 @@ function getScanWindowMinutes(config) {
 }
 
 function getScanMessageLimit() {
-  const parsed = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+  const parsed = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 30);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
 }
 
 function getMessageDate(message) {
@@ -312,6 +314,10 @@ function getSenderLabel(message) {
   const name = clean([first, last].filter(Boolean).join(" "), title || "Noma'lum");
 
   return username ? `${name} (@${username})` : name;
+}
+
+function getSenderUsername(message) {
+  return clean(message?.sender?.username, "").replace(/^@+/, "");
 }
 
 function getMessageLink(groupId, messageId) {
@@ -340,9 +346,30 @@ function formatDate(date) {
   }).format(date instanceof Date ? date : new Date());
 }
 
-function buildLeadText({ group, message, matchedKeywords }) {
+function buildLeadData({ group, message, matchedKeywords, score, reasons }) {
   const link = getMessageLink(group.id, message.id);
   const sender = getSenderLabel(message);
+  return {
+    source: "group-lead",
+    groupId: group.id,
+    groupTitle: clean(group.title, group.id),
+    messageId: message.id,
+    username: getSenderUsername(message),
+    sender,
+    message: clean(message.message),
+    matchedKeywords,
+    link,
+    score,
+    reasons,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function buildLeadText(lead) {
+  const { group, message, matchedKeywords, score, reasons } = lead;
+  const leadData = buildLeadData(lead);
+  const link = leadData.link;
+  const sender = leadData.sender;
   const lines = [
     "<b>🔎 Guruhdan yangi lid</b>",
     "",
@@ -351,6 +378,7 @@ function buildLeadText({ group, message, matchedKeywords }) {
     `👤 <b>Kim yozdi:</b> ${escapeHtml(sender)}`,
     `👥 <b>Qaysi guruh:</b> ${escapeHtml(clean(group.title, group.id))}`,
     `🏷 <b>Kalit so'z:</b> ${escapeHtml(matchedKeywords.join(", "))}`,
+    `🧠 <b>Tahlil balli:</b> ${escapeHtml(score || matchedKeywords.length)}${reasons?.length ? ` (${escapeHtml(reasons.join(", "))})` : ""}`,
     `🕒 <b>Vaqt:</b> ${escapeHtml(formatDate(message.date))}`,
   ];
 
@@ -358,15 +386,98 @@ function buildLeadText({ group, message, matchedKeywords }) {
     lines.push(`🔗 <b>Asl xabar:</b> ${escapeHtml(link)}`);
   }
 
+  lines.push("", `<code>${escapeHtml(`${GROUP_LEAD_DATA_MARKER} ${JSON.stringify(leadData)}`)}</code>`);
+
   return lines.join("\n");
 }
 
 function buildLeadApprovalKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: "✅ Tasdiqlash", callback_data: "gl_confirm" }],
+      [
+        { text: "✅ Tasdiqlash", callback_data: "gl_confirm" },
+        { text: "❌ Bekor", callback_data: "gl_cancel" },
+      ],
     ],
   };
+}
+
+function tokenizeLeadText(value) {
+  const stopWords = new Set([
+    "kerak", "bormi", "bor", "ekan", "uchun", "bilan", "qilib", "qiladi", "qanaqa",
+    "нужен", "нужна", "есть", "для", "или", "как", "что", "это", "меня",
+  ]);
+  return normalizeText(value)
+    .replace(/https?:\/\/\S+/g, " ")
+    .split(/[^a-zа-я0-9']+/i)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 3 && !stopWords.has(item));
+}
+
+function buildLearningProfile(feedbackItems) {
+  const approvedTerms = new Map();
+  const canceledTerms = new Map();
+  let approvedCount = 0;
+  let canceledCount = 0;
+
+  for (const item of feedbackItems) {
+    if (item?.source && item.source !== "group-lead") continue;
+    const target = item?.status === "approved" ? approvedTerms : item?.status === "canceled" ? canceledTerms : null;
+    if (!target) continue;
+    if (item.status === "approved") approvedCount += 1;
+    if (item.status === "canceled") canceledCount += 1;
+
+    const text = [item.message, ...(Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [])].join(" ");
+    for (const term of new Set(tokenizeLeadText(text))) {
+      target.set(term, (target.get(term) || 0) + 1);
+    }
+  }
+
+  return { approvedTerms, canceledTerms, approvedCount, canceledCount };
+}
+
+function scoreLeadMessage(text, matchedKeywords, learningProfile) {
+  const tokens = new Set(tokenizeLeadText(text));
+  const approvedHits = [];
+  const canceledHits = [];
+  let score = matchedKeywords.length * 4;
+
+  for (const token of tokens) {
+    const approvedWeight = learningProfile.approvedTerms.get(token) || 0;
+    const canceledWeight = learningProfile.canceledTerms.get(token) || 0;
+    if (approvedWeight) approvedHits.push(token);
+    if (canceledWeight) canceledHits.push(token);
+    score += Math.min(approvedWeight, 4) * 3;
+    score -= Math.min(canceledWeight, 4) * 4;
+  }
+
+  return {
+    score,
+    reasons: [
+      matchedKeywords.length ? "kalit so'z" : "",
+      approvedHits.length ? `tasdiqlanganlarga o'xshash: ${approvedHits.slice(0, 3).join(", ")}` : "",
+      canceledHits.length ? `bekor qilinganlarga o'xshash: ${canceledHits.slice(0, 3).join(", ")}` : "",
+    ].filter(Boolean),
+  };
+}
+
+async function readRecentFeedback(client) {
+  const topicId = getConfigTopicId();
+  if (!topicId) return [];
+
+  const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+  const iterator = client.iterMessages(entity, {
+    limit: Number(process.env.TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT || 250),
+    replyTo: topicId,
+  });
+  const feedback = [];
+
+  for await (const message of iterator) {
+    const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
+    if (parsed) feedback.push(parsed);
+  }
+
+  return feedback;
 }
 
 async function saveState(token, state) {
@@ -390,7 +501,7 @@ function isAuthorized(req) {
   return header === `Bearer ${secret}` || querySecret === secret;
 }
 
-async function scanGroup(client, group, config, state) {
+async function scanGroup(client, group, config, state, learningProfile) {
   const entity = await client.getEntity(getEntityInput(group.id));
   const lastId = Number(state[group.id] || 0);
   const limit = getScanMessageLimit();
@@ -426,9 +537,11 @@ async function scanGroup(client, group, config, state) {
     if (!text) continue;
 
     const matchedKeywords = findMatchedKeywords(text, getLeadKeywords(config));
-    if (matchedKeywords.length === 0) continue;
+    const analysis = scoreLeadMessage(text, matchedKeywords, learningProfile);
+    if (matchedKeywords.length === 0 && analysis.score < 6) continue;
+    if (analysis.score <= 0) continue;
 
-    found.push({ group, message, matchedKeywords });
+    found.push({ group, message, matchedKeywords, ...analysis });
   }
 
   return { found, newestId, checked, skippedOld };
@@ -459,6 +572,8 @@ export default async function handler(req, res) {
 
       const groups = getLeadGroups(config);
       const state = (await readLatestMarker(client, GROUP_LEADS_STATE_MARKER)) || {};
+      const feedback = await readRecentFeedback(client);
+      const learningProfile = buildLearningProfile(feedback);
       const nextState = { ...state };
       const leadTopicId = getLeadTopicId();
       let sent = 0;
@@ -468,7 +583,7 @@ export default async function handler(req, res) {
 
       for (const group of groups) {
         try {
-          const scan = await scanGroup(client, group, config, state);
+          const scan = await scanGroup(client, group, config, state, learningProfile);
           nextState[group.id] = scan.newestId;
           checked += scan.checked || 0;
           skippedOld += scan.skippedOld || 0;
@@ -502,6 +617,8 @@ export default async function handler(req, res) {
         windowMinutes: getScanWindowMinutes(config),
         messageLimit: getScanMessageLimit(),
         keywordCount: getLeadKeywords(config).length,
+        approvedMemory: learningProfile.approvedCount,
+        canceledMemory: learningProfile.canceledCount,
         errors,
       };
     });
