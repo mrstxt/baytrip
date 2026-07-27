@@ -417,6 +417,7 @@ function tokenizeLeadText(value) {
 function buildLearningProfile(feedbackItems) {
   const approvedTerms = new Map();
   const canceledTerms = new Map();
+  const canceledExamples = [];
   let approvedCount = 0;
   let canceledCount = 0;
 
@@ -425,7 +426,14 @@ function buildLearningProfile(feedbackItems) {
     const target = item?.status === "approved" ? approvedTerms : item?.status === "canceled" ? canceledTerms : null;
     if (!target) continue;
     if (item.status === "approved") approvedCount += 1;
-    if (item.status === "canceled") canceledCount += 1;
+    if (item.status === "canceled") {
+      canceledCount += 1;
+      canceledExamples.push({
+        message: clean(item.message, ""),
+        matchedKeywords: Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [],
+        tokens: new Set(tokenizeLeadText([item.message, ...(Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [])].join(" "))),
+      });
+    }
 
     const text = [item.message, ...(Array.isArray(item.matchedKeywords) ? item.matchedKeywords : [])].join(" ");
     for (const term of new Set(tokenizeLeadText(text))) {
@@ -433,14 +441,39 @@ function buildLearningProfile(feedbackItems) {
     }
   }
 
-  return { approvedTerms, canceledTerms, approvedCount, canceledCount };
+  return { approvedTerms, canceledTerms, canceledExamples, approvedCount, canceledCount };
+}
+
+function getTokenSimilarity(leftTokens, rightTokens) {
+  if (!leftTokens?.size || !rightTokens?.size) return 0;
+  let intersection = 0;
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) intersection += 1;
+  }
+  return intersection / Math.min(leftTokens.size, rightTokens.size);
 }
 
 function scoreLeadMessage(text, matchedKeywords, learningProfile) {
   const tokens = new Set(tokenizeLeadText(text));
   const approvedHits = [];
   const canceledHits = [];
+  const normalizedText = normalizeText(text);
+  const canceledMatch = learningProfile.canceledExamples.find((example) => {
+    if (!example.message) return false;
+    const normalizedExample = normalizeText(example.message);
+    if (normalizedExample && normalizedText === normalizedExample) return true;
+    if (normalizedExample.length >= 20 && (normalizedText.includes(normalizedExample) || normalizedExample.includes(normalizedText))) return true;
+    return getTokenSimilarity(tokens, example.tokens) >= 0.7;
+  });
   let score = matchedKeywords.length * 4;
+
+  if (canceledMatch) {
+    return {
+      score: -100,
+      blocked: true,
+      reasons: ["bekor qilingan xabarga o'xshash"],
+    };
+  }
 
   for (const token of tokens) {
     const approvedWeight = learningProfile.approvedTerms.get(token) || 0;
@@ -538,6 +571,7 @@ async function scanGroup(client, group, config, state, learningProfile) {
 
     const matchedKeywords = findMatchedKeywords(text, getLeadKeywords(config));
     const analysis = scoreLeadMessage(text, matchedKeywords, learningProfile);
+    if (analysis.blocked) continue;
     if (matchedKeywords.length === 0 && analysis.score < 6) continue;
     if (analysis.score <= 0) continue;
 

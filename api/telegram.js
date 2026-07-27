@@ -239,6 +239,28 @@ async function editBotMessageText(token, chatId, messageId, text, extra = {}) {
   return data;
 }
 
+async function deleteBotMessage(token, chatId, messageId) {
+  const response = await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    console.error("telegram deleteMessage failed", {
+      chatId,
+      messageId,
+      status: response.status,
+      description: data?.description,
+    });
+  }
+  return data;
+}
+
 function buildAdminPanelKeyboard() {
   return {
     keyboard: [
@@ -1789,18 +1811,36 @@ async function handleBotUpdate(body, token, context = {}) {
       }
 
       const employeeName = getCallbackUserName(callback);
-      await saveLeadFeedback(token, leadData, "canceled", callback, { employeeName }).catch((error) => {
-        console.error("group lead feedback save failed", {
-          status: "canceled",
-          error: error instanceof Error ? error.message : error,
-        });
-      });
-      await editBotMessageText(
+      try {
+        await saveLeadFeedback(token, leadData, "canceled", callback, { employeeName });
+      } catch (error) {
+        await sendBotMessage(
+          token,
+          chatId,
+          `Bekor xotiraga yozilmadi: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+          callback.message?.message_thread_id ? { message_thread_id: callback.message.message_thread_id } : {}
+        );
+        return { ok: true };
+      }
+      const deleteResult = await deleteBotMessage(
         token,
         chatId,
-        callback.message.message_id,
-        buildCanceledLeadEditedText(callback.message?.text, employeeName),
-        { reply_markup: { inline_keyboard: [] } }
+        callback.message.message_id
+      );
+      if (!deleteResult?.ok) {
+        await editBotMessageText(
+          token,
+          chatId,
+          callback.message.message_id,
+          buildCanceledLeadEditedText(callback.message?.text, employeeName),
+          { reply_markup: { inline_keyboard: [] } }
+        );
+      }
+      await sendBotMessage(
+        token,
+        chatId,
+        "Bekor qilindi va keyingi scanlar uchun xotiraga qo'shildi.",
+        callback.message?.message_thread_id ? { message_thread_id: callback.message.message_thread_id } : {}
       );
       return { ok: true };
     }
