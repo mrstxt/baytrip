@@ -1,3 +1,5 @@
+import { Api } from "telegram";
+
 const LEAD_LABELS = {
   "external-tour": "Tashqi tur paketi",
   "domestic-tour": "Ichki tur paketi",
@@ -201,6 +203,17 @@ function buildMessageSearchOptions(limit, topicId) {
 
 function getStorageMessageOptions() {
   return {};
+}
+
+function getTelegramEntityInput(chatId) {
+  const value = clean(chatId, "");
+  if (/^-100\d{6,}$/.test(value)) {
+    return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
+  }
+  if (/^-\d+$/.test(value)) {
+    return new Api.PeerChat({ chatId: BigInt(value.slice(1)) });
+  }
+  return /^-?\d+$/.test(value) ? Number(value) : value;
 }
 
 function encodeMarkerPayload(payload) {
@@ -639,20 +652,24 @@ async function getLatestBayClubPriceConfig() {
     const topicIds = getBayClubConfigTopicIds();
 
     for (const target of getStorageReadTargets(topicIds)) {
-      const entity = await client.getEntity(target.chatId);
-      for (const topicId of target.topicIds) {
-        const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
+      try {
+        const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
+        for (const topicId of target.topicIds) {
+          const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
-        for await (const message of iterator) {
-          const parsed = parseMarkerJson(message.message, PRICE_CONFIG_MARKER);
-          if (!parsed) continue;
+          for await (const message of iterator) {
+            const parsed = parseMarkerJson(message.message, PRICE_CONFIG_MARKER);
+            if (!parsed) continue;
 
-          configs.unshift(parsed);
-          const merged = mergePriceConfigs(configs);
-          if ([...wantedPlans].every((plan) => merged[plan])) {
-            return merged;
+            configs.unshift(parsed);
+            const merged = mergePriceConfigs(configs);
+            if ([...wantedPlans].every((plan) => merged[plan])) {
+              return merged;
+            }
           }
         }
+      } catch {
+        // Storage yoki eski topic session uchun ko'rinmasa, narx yangilash to'xtamasin.
       }
     }
 

@@ -1,3 +1,5 @@
+import { Api } from "telegram";
+
 const PRICE_CONFIG_MARKER = "BAYCLUB_PRICE_CONFIG";
 const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 
@@ -43,6 +45,17 @@ function getStorageReadTargets(topicIds = []) {
 
 function buildMessageSearchOptions(limit, topicId) {
   return topicId ? { limit, replyTo: topicId } : { limit };
+}
+
+function getTelegramEntityInput(chatId) {
+  const value = clean(chatId);
+  if (/^-100\d{6,}$/.test(value)) {
+    return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
+  }
+  if (/^-\d+$/.test(value)) {
+    return new Api.PeerChat({ chatId: BigInt(value.slice(1)) });
+  }
+  return /^-?\d+$/.test(value) ? Number(value) : value;
 }
 
 function getAdminProfileConfig() {
@@ -139,20 +152,24 @@ export default async function handler(req, res) {
       const topicIds = getBayClubConfigTopicIds();
 
       for (const target of getStorageReadTargets(topicIds)) {
-        const entity = await client.getEntity(target.chatId);
-        for (const topicId of target.topicIds) {
-          const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
+        try {
+          const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
+          for (const topicId of target.topicIds) {
+            const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
-          for await (const message of iterator) {
-            const parsed = parseConfigMessage(message.message);
-            if (!parsed) continue;
+            for await (const message of iterator) {
+              const parsed = parseConfigMessage(message.message);
+              if (!parsed) continue;
 
-            configs.unshift(parsed);
-            const merged = mergePriceConfigs(configs);
-            if ([...wantedPlans].every((plan) => merged[plan])) {
-              return merged;
+              configs.unshift(parsed);
+              const merged = mergePriceConfigs(configs);
+              if ([...wantedPlans].every((plan) => merged[plan])) {
+                return merged;
+              }
             }
           }
+        } catch {
+          // Storage yoki eski topic session uchun ko'rinmasa, keyingi target sinab ko'riladi.
         }
       }
 
