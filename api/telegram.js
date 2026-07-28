@@ -22,13 +22,19 @@ const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
 const SITE_LEAD_DATA_MARKER = "SITE_LEAD_DATA";
 const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
+const SERVICE_CHAT_STATE_MARKER = "SERVICE_CHAT_STATE";
+const LIVE_CHAT_CONFIG_MARKER = "LIVE_CHAT_CONFIG";
+const LIVE_CHAT_MEMORY_MARKER = "LIVE_CHAT_MEMORY";
 const GROUP_LEAD_CONFIRM_CALLBACK = "gl_confirm";
 const GROUP_LEAD_CANCEL_CALLBACK = "gl_cancel";
 const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
+const LIVE_CHAT_STATS_CALLBACK = "live_stats";
+const LIVE_CHAT_TOGGLE_CALLBACK = "live_toggle";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
 const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
 const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
 const BUTTON_LEAD_SCANNER = "🧭 Lid skaner";
+const BUTTON_LIVE_CHAT = "💬 Jonli suhbat";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
 const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
@@ -305,7 +311,18 @@ function buildAdminDeniedText(message) {
   ].join("\n");
 }
 
+function normalizeTelegramChatId(value) {
+  return clean(value, "");
+}
+
+function isPrivateServiceChat(chatId, extra = {}) {
+  if (extra?.message_thread_id || extra?.__skipServiceLog) return false;
+  const normalized = normalizeTelegramChatId(chatId);
+  return /^\d+$/.test(normalized);
+}
+
 async function sendBotMessage(token, chatId, text, extra = {}) {
+  const { __skipServiceLog, ...telegramExtra } = extra || {};
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -314,7 +331,7 @@ async function sendBotMessage(token, chatId, text, extra = {}) {
       text,
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      ...extra,
+      ...telegramExtra,
     }),
   });
 
@@ -324,6 +341,14 @@ async function sendBotMessage(token, chatId, text, extra = {}) {
       chatId,
       status: response.status,
       description: data?.description,
+    });
+  }
+  if (data?.ok && isPrivateServiceChat(chatId, { ...telegramExtra, __skipServiceLog })) {
+    await appendServiceChatMessages(token, chatId, [data.result?.message_id]).catch((error) => {
+      console.error("service chat message log failed", {
+        chatId,
+        error: error instanceof Error ? error.message : error,
+      });
     });
   }
   return data;
@@ -426,6 +451,7 @@ function buildAdminPanelKeyboard() {
     keyboard: [
       [{ text: BUTTON_PROMO }, { text: BUTTON_BAYCLUB_PRICES }],
       [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_LEAD_SCANNER }],
+      [{ text: BUTTON_LIVE_CHAT }],
       [{ text: BUTTON_STATS }, { text: BUTTON_RECENT_ACTIONS }],
       [{ text: BUTTON_CLEANUP }],
       [{ text: BUTTON_LOGOUT }],
@@ -447,6 +473,15 @@ function buildGroupLeadsKeyboard() {
   };
 }
 
+function buildLiveChatKeyboard(config) {
+  return {
+    inline_keyboard: [
+      [{ text: "📊 Suhbatlashuv statistikasi", callback_data: LIVE_CHAT_STATS_CALLBACK }],
+      [{ text: config?.enabled ? "⏸ Suhbatni o'chirish" : "▶️ Suhbatni yoqish", callback_data: LIVE_CHAT_TOGGLE_CALLBACK }],
+    ],
+  };
+}
+
 function buildRemoveKeyboard() {
   return {
     remove_keyboard: true,
@@ -465,9 +500,10 @@ async function sendAdminPanel(token, chatId) {
       "💳 BayClub tarif narxlarini o'zgartirish",
       "🔎 Guruh lidlari: 1 soat, oxirgi 30 xabar, 100 ta default kalit so'z",
       "🧭 Lid skaner: hoziroq test scan qilish",
+      "💬 Jonli suhbat: profil chatlarini tahlil qilish va javob rejimini boshqarish",
       "📊 Hodimlar va murojaatlar statistikasi",
       "🧾 Oxirgi sozlama amallarini ko'rish",
-      "🧹 Bot yozgan yordamchi xabarlarni tozalash",
+      "🧹 Bot bilan shaxsiy chatdagi yordamchi xabarlarni tozalash",
     ].join("\n"),
     { reply_markup: buildAdminPanelKeyboard() }
   );
@@ -609,6 +645,284 @@ async function sendGroupLeadsEmployeesPrompt(token, chatId) {
       },
     }
   );
+}
+
+function normalizeLiveChatConfig(config) {
+  return {
+    enabled: config?.enabled === true,
+    analysisOnly: config?.enabled !== true,
+    updatedAt: clean(config?.updatedAt, new Date().toISOString()),
+  };
+}
+
+async function getLiveChatConfig() {
+  try {
+    return await withAdminClient(async (client) => normalizeLiveChatConfig(
+      await readLatestStorageMarker(client, LIVE_CHAT_CONFIG_MARKER, 80)
+    ));
+  } catch {
+    return normalizeLiveChatConfig(null);
+  }
+}
+
+async function saveLiveChatConfig(token, config) {
+  const chatId = getStorageChatId();
+  if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
+  await sendBotMessage(
+    token,
+    chatId,
+    buildMarkerText(LIVE_CHAT_CONFIG_MARKER, normalizeLiveChatConfig({
+      ...config,
+      updatedAt: new Date().toISOString(),
+    })),
+    { ...getStorageMessageOptions(), __skipServiceLog: true }
+  );
+}
+
+async function saveLiveChatMemory(token, memory) {
+  const chatId = getStorageChatId();
+  if (!chatId) return;
+  await sendBotMessage(
+    token,
+    chatId,
+    buildMarkerText(LIVE_CHAT_MEMORY_MARKER, {
+      ...memory,
+      updatedAt: new Date().toISOString(),
+    }),
+    { ...getStorageMessageOptions(), __skipServiceLog: true }
+  );
+}
+
+async function getLiveChatMemory() {
+  try {
+    return await withAdminClient(async (client) => (
+      await readLatestStorageMarker(client, LIVE_CHAT_MEMORY_MARKER, 80)
+    ) || {});
+  } catch {
+    return {};
+  }
+}
+
+function isPrivateUserEntity(entity) {
+  const className = clean(entity?.className || entity?.constructor?.name, "");
+  return className === "User" && !entity?.bot && !entity?.self;
+}
+
+function getEntityDisplayName(entity) {
+  const name = [entity?.firstName, entity?.lastName].map((item) => clean(item, "")).filter(Boolean).join(" ");
+  const username = normalizeTelegramUsername(entity?.username);
+  return name || (username ? `@${username}` : `ID ${entity?.id?.value ?? entity?.id ?? "-"}`);
+}
+
+async function collectLiveChatStats(token) {
+  const config = await getLiveChatConfig();
+  const previousMemory = await getLiveChatMemory();
+  return withAdminClient(async (client) => {
+    const dialogs = await client.getDialogs({ limit: Number(process.env.TELEGRAM_LIVE_CHAT_DIALOG_LIMIT || 120) });
+    const messageLimit = Number(process.env.TELEGRAM_LIVE_CHAT_MESSAGE_LIMIT || 20);
+    const todayStart = getTodayStartTashkent();
+    const rows = [];
+    let privateChats = 0;
+    let scannedMessages = 0;
+    let todayMessages = 0;
+    let unreadDialogs = 0;
+
+    for (const dialog of dialogs) {
+      const entity = dialog.entity;
+      if (!isPrivateUserEntity(entity)) continue;
+      privateChats += 1;
+      if (Number(dialog.unreadCount || 0) > 0) unreadDialogs += 1;
+
+      let messages = 0;
+      let today = 0;
+      let lastText = "";
+      const iterator = client.iterMessages(entity, { limit: Number.isFinite(messageLimit) ? messageLimit : 20 });
+      for await (const message of iterator) {
+        const text = clean(message.message, "");
+        if (!text) continue;
+        messages += 1;
+        scannedMessages += 1;
+        lastText ||= text.slice(0, 80);
+        const messageDate = message.date instanceof Date ? message.date : new Date(message.date);
+        if (messageDate >= todayStart) {
+          today += 1;
+          todayMessages += 1;
+        }
+      }
+
+      if (messages || Number(dialog.unreadCount || 0) > 0) {
+        rows.push({
+          name: getEntityDisplayName(entity),
+          unread: Number(dialog.unreadCount || 0),
+          today,
+          messages,
+          lastText,
+        });
+      }
+    }
+
+    rows.sort((a, b) => (b.unread - a.unread) || (b.today - a.today) || (b.messages - a.messages));
+    const memory = {
+      ...previousMemory,
+      enabled: config.enabled,
+      privateChats,
+      unreadDialogs,
+      scannedMessages,
+      todayMessages,
+      topChats: rows.slice(0, 10),
+    };
+    await saveLiveChatMemory(token, memory);
+    return memory;
+  });
+}
+
+function buildLiveChatAutoReply(text) {
+  const normalized = normalizeText(text);
+  const matchedTour = [
+    ["dubai", "Dubai"],
+    ["dubay", "Dubai"],
+    ["turkiya", "Turkiya"],
+    ["istanbul", "Turkiya"],
+    ["umra", "Umra"],
+    ["avia", "avia chipta"],
+    ["bilet", "avia chipta"],
+    ["mehmonxona", "mehmonxona"],
+    ["hotel", "mehmonxona"],
+    ["samarqand", "ichki tur"],
+    ["buxoro", "ichki tur"],
+    ["xiva", "ichki tur"],
+  ].find(([term]) => normalized.includes(term))?.[1];
+
+  return [
+    "Assalomu alaykum! Xabaringizni oldik.",
+    matchedTour
+      ? `${matchedTour} bo'yicha mos variantlarni tekshirib, sizga tez orada aniq narx va sanalarni yuboramiz.`
+      : "Sayohat bo'yicha so'rovingizni ko'rib chiqyapmiz, sizga tez orada javob beramiz.",
+    "",
+    "Agar qulay bo'lsa, nechta kishi, qaysi sana va taxminiy byudjetni yozib qoldiring.",
+  ].join("\n");
+}
+
+async function runLiveChatAutomation(token) {
+  const config = await getLiveChatConfig();
+  if (!config.enabled) {
+    return { ok: true, enabled: false, scanned: 0, replied: 0, skipped: 0 };
+  }
+
+  const memory = await getLiveChatMemory();
+  const answered = new Set(Object.values(memory.answeredMessages || {}).map((value) => Number(value)).filter(Boolean));
+  const maxReplies = Number(process.env.TELEGRAM_LIVE_CHAT_MAX_REPLIES || 10);
+
+  return withAdminClient(async (client) => {
+    const dialogs = await client.getDialogs({ limit: Number(process.env.TELEGRAM_LIVE_CHAT_DIALOG_LIMIT || 120) });
+    let scanned = 0;
+    let replied = 0;
+    let skipped = 0;
+    const answeredMessages = { ...(memory.answeredMessages || {}) };
+
+    for (const dialog of dialogs) {
+      if (replied >= (Number.isFinite(maxReplies) ? maxReplies : 10)) break;
+      const entity = dialog.entity;
+      if (!isPrivateUserEntity(entity) || Number(dialog.unreadCount || 0) <= 0) continue;
+      scanned += 1;
+
+      const iterator = client.iterMessages(entity, { limit: 5 });
+      for await (const message of iterator) {
+        const text = clean(message.message, "");
+        if (!text || message.out) continue;
+        const messageId = Number(message.id);
+        const key = String(entity.id?.value ?? entity.id ?? getEntityDisplayName(entity));
+        if (answered.has(messageId) || Number(answeredMessages[key]) === messageId) {
+          skipped += 1;
+          break;
+        }
+
+        await client.sendMessage(entity, { message: buildLiveChatAutoReply(text) });
+        answeredMessages[key] = messageId;
+        answered.add(messageId);
+        replied += 1;
+        break;
+      }
+    }
+
+    const nextMemory = {
+      ...memory,
+      enabled: true,
+      automationLastRunAt: new Date().toISOString(),
+      automation: { scanned, replied, skipped },
+      answeredMessages,
+    };
+    await saveLiveChatMemory(token, nextMemory);
+    return { ok: true, enabled: true, scanned, replied, skipped };
+  });
+}
+
+function buildLiveChatMenuMessage(config) {
+  return [
+    "<b>💬 Jonli suhbat</b>",
+    "",
+    `Holat: <b>${config.enabled ? "yoqilgan" : "o'chirilgan"}</b>`,
+    config.enabled
+      ? "Yoqilgan rejim: profil session o'qilmagan shaxsiy chatlarni tahlil qiladi va mos kelganlariga javob yuboradi."
+      : "O'chirilgan rejim: bot faqat profil chatlarini tahlil qilib, baza yig'adi.",
+    "",
+    "Avto-javob qayta-qayta spam qilmaslik uchun oxirgi javob berilgan xabarlarni xotirada saqlaydi.",
+  ].join("\n");
+}
+
+function buildLiveChatStatsMessage(stats) {
+  const rows = Array.isArray(stats.topChats) ? stats.topChats : [];
+  const automation = stats.automation || {};
+  return [
+    "<b>📊 Suhbatlashuv statistikasi</b>",
+    "",
+    `Holat: <b>${stats.enabled ? "yoqilgan" : "o'chirilgan"}</b>`,
+    `Profil chatlari: <b>${escapeHtml(stats.privateChats ?? 0)}</b>`,
+    `O'qilmagan chatlar: <b>${escapeHtml(stats.unreadDialogs ?? 0)}</b>`,
+    `Bugungi xabarlar: <b>${escapeHtml(stats.todayMessages ?? 0)}</b>`,
+    `Tahlil qilingan xabarlar: <b>${escapeHtml(stats.scannedMessages ?? 0)}</b>`,
+    `Oxirgi avto-javob: <b>${escapeHtml(automation.replied ?? 0)}</b> javob`,
+    "",
+    rows.length ? "<b>Faol chatlar:</b>" : "Faol chat topilmadi.",
+    ...rows.slice(0, 8).map((item, index) => [
+      `${index + 1}. ${escapeHtml(item.name)} — bugun ${escapeHtml(item.today)}, unread ${escapeHtml(item.unread)}`,
+      item.lastText ? `   ${escapeHtml(item.lastText)}` : "",
+    ].filter(Boolean).join("\n")),
+  ].join("\n");
+}
+
+async function sendLiveChatMenu(token, chatId) {
+  const config = await getLiveChatConfig();
+  await sendBotMessage(token, chatId, buildLiveChatMenuMessage(config), {
+    reply_markup: buildLiveChatKeyboard(config),
+  });
+}
+
+async function sendLiveChatStats(token, chatId) {
+  try {
+    await sendBotMessage(token, chatId, "📊 Suhbatlar tahlil qilinyapti...");
+    const stats = await collectLiveChatStats(token);
+    const config = await getLiveChatConfig();
+    await sendBotMessage(token, chatId, buildLiveChatStatsMessage(stats), {
+      reply_markup: buildLiveChatKeyboard(config),
+    });
+  } catch (error) {
+    await sendBotMessage(
+      token,
+      chatId,
+      `Jonli suhbat statistikasi olinmadi: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+      { reply_markup: buildAdminPanelKeyboard() }
+    );
+  }
+}
+
+async function toggleLiveChat(token, chatId) {
+  const current = await getLiveChatConfig();
+  const next = normalizeLiveChatConfig({ ...current, enabled: !current.enabled });
+  await saveLiveChatConfig(token, next);
+  await sendBotMessage(token, chatId, buildLiveChatMenuMessage(next), {
+    reply_markup: buildLiveChatKeyboard(next),
+  });
 }
 
 async function runPromoBroadcast(token, chatId, promoMessage) {
@@ -791,6 +1105,98 @@ function parseMarkerJson(text, marker) {
   } catch {
     return null;
   }
+}
+
+async function readLatestStorageMarker(client, marker, limit = 150) {
+  const topicIds = [
+    ...getBayClubConfigTopicIds(),
+    ...getGroupLeadsConfigTopicIds(),
+  ];
+
+  for (const target of getStorageReadTargets(topicIds)) {
+    try {
+      const entities = await getReadableEntities(client, target.chatId);
+      for (const entity of entities) {
+        for (const topicId of target.topicIds) {
+          const iterator = client.iterMessages(entity, buildMessageSearchOptions(limit, topicId));
+
+          for await (const message of iterator) {
+            const parsed = parseMarkerJson(message.message, marker);
+            if (parsed) return parsed;
+          }
+        }
+      }
+    } catch {
+      // Keyingi target sinab ko'riladi.
+    }
+  }
+
+  return null;
+}
+
+function getTodayKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function normalizeServiceChatState(state) {
+  return {
+    version: 1,
+    updatedAt: clean(state?.updatedAt, new Date().toISOString()),
+    chats: state?.chats && typeof state.chats === "object" ? state.chats : {},
+  };
+}
+
+async function getServiceChatState() {
+  try {
+    return await withAdminClient(async (client) => normalizeServiceChatState(
+      await readLatestStorageMarker(client, SERVICE_CHAT_STATE_MARKER, 80)
+    ));
+  } catch {
+    return normalizeServiceChatState(null);
+  }
+}
+
+async function saveServiceChatState(token, state) {
+  const chatId = getStorageChatId();
+  if (!chatId) return;
+  await sendBotMessage(
+    token,
+    chatId,
+    buildMarkerText(SERVICE_CHAT_STATE_MARKER, normalizeServiceChatState({
+      ...state,
+      updatedAt: new Date().toISOString(),
+    })),
+    { ...getStorageMessageOptions(), __skipServiceLog: true }
+  );
+}
+
+async function appendServiceChatMessages(token, chatId, messageIds = []) {
+  const ids = [...new Set(messageIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
+  if (!ids.length || !isPrivateServiceChat(chatId)) return;
+
+  const state = await getServiceChatState();
+  const key = normalizeTelegramChatId(chatId);
+  const current = state.chats[key] || { messages: [] };
+  const day = getTodayKey();
+  const existing = new Set((current.messages || []).map((item) => Number(item.id)));
+  const nextMessages = [
+    ...(current.messages || []),
+    ...ids
+      .filter((id) => !existing.has(id))
+      .map((id) => ({ id, day, at: new Date().toISOString() })),
+  ].slice(-250);
+
+  state.chats[key] = {
+    ...current,
+    updatedAt: new Date().toISOString(),
+    messages: nextMessages,
+  };
+  await saveServiceChatState(token, state);
 }
 
 function getCallbackUserName(callback) {
@@ -1406,6 +1812,9 @@ function isPersistentBotMemoryMessage(text) {
     GROUP_LEADS_CONFIG_MARKER,
     GROUP_LEADS_STATE_MARKER,
     GROUP_LEAD_FEEDBACK_MARKER,
+    SERVICE_CHAT_STATE_MARKER,
+    LIVE_CHAT_CONFIG_MARKER,
+    LIVE_CHAT_MEMORY_MARKER,
   ].some((marker) => raw.includes(marker));
 }
 
@@ -1478,11 +1887,9 @@ function buildCleanupResultMessage(result) {
 }
 
 async function runBotMessageCleanup(token, chatId) {
-  await sendBotMessage(token, chatId, "🧹 Tozalash boshlandi. Bot yozgan yordamchi xabarlar tekshirilmoqda...");
-
   try {
-    const result = await cleanupBotMessages(token);
-    await sendBotMessage(token, chatId, buildCleanupResultMessage(result), {
+    const result = await cleanupServiceChatMessages(token, chatId, { mode: "all" });
+    await sendBotMessage(token, chatId, buildServiceCleanupResultMessage(result), {
       reply_markup: buildAdminPanelKeyboard(),
     });
   } catch (error) {
@@ -1493,6 +1900,81 @@ async function runBotMessageCleanup(token, chatId) {
       { reply_markup: buildAdminPanelKeyboard() }
     );
   }
+}
+
+function shouldDeleteServiceMessage(item, mode) {
+  if (mode === "old") return item?.day && item.day < getTodayKey();
+  return true;
+}
+
+async function cleanupServiceChatMessages(token, chatId = null, options = {}) {
+  const mode = options.mode || "old";
+  const state = await getServiceChatState();
+  const targetChatIds = chatId ? [normalizeTelegramChatId(chatId)] : Object.keys(state.chats || {});
+  let deleted = 0;
+  let failed = 0;
+  let checked = 0;
+
+  for (const key of targetChatIds) {
+    const current = state.chats[key];
+    if (!current?.messages?.length) continue;
+
+    const kept = [];
+    for (const item of current.messages) {
+      if (!shouldDeleteServiceMessage(item, mode)) {
+        kept.push(item);
+        continue;
+      }
+
+      checked += 1;
+      const result = await deleteBotMessage(token, key, item.id);
+      if (result?.ok) {
+        deleted += 1;
+      } else {
+        failed += 1;
+        kept.push(item);
+      }
+    }
+
+    state.chats[key] = {
+      ...current,
+      updatedAt: new Date().toISOString(),
+      messages: kept.slice(-250),
+    };
+  }
+
+  await saveServiceChatState(token, state);
+  return { mode, chats: targetChatIds.length, checked, deleted, failed };
+}
+
+async function runGroupLeadScanFromCron(req) {
+  const baseUrl = getRequestBaseUrl(req);
+  if (!baseUrl) return { ok: false, error: "Base URL aniqlanmadi." };
+
+  const secret = getCronSecret();
+  const response = await fetch(`${baseUrl}/api/group-leads-scan`, {
+    method: "GET",
+    headers: secret ? { Authorization: `Bearer ${secret}` } : {},
+  });
+  return response.json().catch(() => ({
+    ok: false,
+    status: response.status,
+    error: "Skaner javobi JSON formatida emas.",
+  }));
+}
+
+function buildServiceCleanupResultMessage(result) {
+  return [
+    "<b>🧹 Bot chat tozalandi</b>",
+    "",
+    `Rejim: <b>${escapeHtml(result.mode === "old" ? "kunlik eski xabarlar" : "joriy chat")}</b>`,
+    `Chatlar: <b>${escapeHtml(result.chats ?? 0)}</b>`,
+    `Tekshirilgan: <b>${escapeHtml(result.checked ?? 0)}</b>`,
+    `O'chirilgan: <b>${escapeHtml(result.deleted ?? 0)}</b>`,
+    result.failed ? `O'chmay qolgan: <b>${escapeHtml(result.failed)}</b>` : "",
+    "",
+    "DATA/config xabarlari va guruh ichidagi lidlar o'chirilmaydi.",
+  ].filter(Boolean).join("\n");
 }
 
 function getCronSecret() {
@@ -2208,6 +2690,16 @@ async function handleBotUpdate(body, token, context = {}) {
       return { ok: true };
     }
 
+    if (data === LIVE_CHAT_STATS_CALLBACK) {
+      await sendLiveChatStats(token, chatId);
+      return { ok: true };
+    }
+
+    if (data === LIVE_CHAT_TOGGLE_CALLBACK) {
+      await toggleLiveChat(token, chatId);
+      return { ok: true };
+    }
+
     if (data === "logout") {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
         reply_markup: buildRemoveKeyboard(),
@@ -2230,6 +2722,15 @@ async function handleBotUpdate(body, token, context = {}) {
 
   if (!message || !chatId || !text) {
     return { ok: true, ignored: true };
+  }
+
+  if (message.message_id && isAllowedAdmin(message) && isPrivateServiceChat(chatId)) {
+    await appendServiceChatMessages(token, chatId, [message.message_id]).catch((error) => {
+      console.error("service chat incoming message log failed", {
+        chatId,
+        error: error instanceof Error ? error.message : error,
+      });
+    });
   }
 
   const replyText = clean(message.reply_to_message?.text, "");
@@ -2345,6 +2846,7 @@ async function handleBotUpdate(body, token, context = {}) {
     BUTTON_BAYCLUB_PRICES,
     BUTTON_GROUP_LEADS,
     BUTTON_LEAD_SCANNER,
+    BUTTON_LIVE_CHAT,
     BUTTON_GROUPS,
     BUTTON_KEYWORDS,
     BUTTON_EMPLOYEES,
@@ -2367,6 +2869,8 @@ async function handleBotUpdate(body, token, context = {}) {
       await sendGroupLeadsMenu(token, chatId);
     } else if (text === BUTTON_LEAD_SCANNER) {
       await runLeadScannerNow(token, chatId, context.baseUrl);
+    } else if (text === BUTTON_LIVE_CHAT) {
+      await sendLiveChatMenu(token, chatId);
     } else if (text === BUTTON_GROUPS) {
       await sendGroupLeadsGroupsPrompt(token, chatId);
     } else if (text === BUTTON_KEYWORDS) {
@@ -2759,6 +3263,7 @@ async function sendLeadToTelegram(token, payload) {
 export default async function handler(req, res) {
   if (req.method === "GET") {
     const debugAllowed = isDebugRequestAuthorized(req);
+    const task = clean(req.query?.task, "");
     const publicHealth = {
       ok: true,
       service: "telegram",
@@ -2768,6 +3273,21 @@ export default async function handler(req, res) {
 
     if (!debugAllowed) {
       return res.status(200).json(publicHealth);
+    }
+
+    if (task === "cleanup-service-chat" || task === "daily-maintenance" || task === "live-chat-scan") {
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      if (!token) {
+        return res.status(500).json({ ok: false, error: "TELEGRAM_BOT_TOKEN kiritilmagan." });
+      }
+      if (task === "live-chat-scan") {
+        const liveChat = await runLiveChatAutomation(token);
+        return res.status(200).json({ ok: true, task, liveChat });
+      }
+      const cleanup = await cleanupServiceChatMessages(token, null, { mode: "old" });
+      const liveChat = task === "daily-maintenance" ? await runLiveChatAutomation(token) : null;
+      const groupLeadScan = task === "daily-maintenance" ? await runGroupLeadScanFromCron(req) : null;
+      return res.status(200).json({ ok: true, task, cleanup, liveChat, groupLeadScan });
     }
 
     const topicIds = {

@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/group-leads-scan",
-      "schedule": "0 5 * * *"
+      "path": "/api/telegram?task=daily-maintenance",
+      "schedule": "5 19 * * *"
     }
   ]
 }
