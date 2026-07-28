@@ -902,6 +902,7 @@ function buildLiveChatMenuMessage(config) {
       ? "Yoqilgan rejim: profil session o'qilmagan shaxsiy chatlarni tahlil qiladi va mos kelganlariga javob yuboradi."
       : "O'chirilgan rejim: bot faqat profil chatlarini tahlil qilib, baza yig'adi.",
     "",
+    "Haqiqiy real-time uchun serverda <code>npm run telegram:live</code> worker ishlashi kerak.",
     "Avto-javob qayta-qayta spam qilmaslik uchun oxirgi javob berilgan xabarlarni xotirada saqlaydi.",
   ].join("\n");
 }
@@ -964,7 +965,7 @@ async function toggleLiveChat(token, chatId) {
   await saveLiveChatConfig(token, next);
 
   if (next.enabled) {
-    await sendBotMessage(token, chatId, "💬 Jonli suhbat real vaqtga yaqin rejimda ishga tushdi. Hozir chatlar tekshirilyapti...", {
+    await sendBotMessage(token, chatId, "💬 Jonli suhbat ishga tushdi. Real-time javoblar uchun serverda <code>npm run telegram:live</code> worker ishlab turishi kerak. Hozir bir martalik scan ham bajariladi...", {
       reply_markup: buildLiveChatKeyboard(next),
     });
     try {

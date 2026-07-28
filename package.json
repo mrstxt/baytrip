@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "telegram:session": "node scripts/create-telegram-session.mjs"
+    "telegram:session": "node scripts/create-telegram-session.mjs",
+    "telegram:live": "node scripts/live-chat-worker.mjs"
   },
   "dependencies": {
     "clsx": "2.1.1",

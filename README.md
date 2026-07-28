@@ -272,6 +272,28 @@ TELEGRAM_API_ID=123456 TELEGRAM_API_HASH=abcdef123456 npm run telegram:session
 
 Script telefon raqam, Telegram kod va 2FA parolni so'raydi. Oxirida chiqqan `TELEGRAM_ADMIN_SESSION` qiymatini Vercel envga yozing.
 
+## Jonli suhbat real-time worker
+
+Bot admin panelidagi `Jonli suhbat` yoqilgan yoki o'chirilgan holati `DATA \ BAYTRIP` storage guruhida saqlanadi. Vercel serverless endpoint doimiy real-time tinglovchi bo'lib ishlab turolmaydi; yangi shaxsiy xabarlarga sekundma-sekund javob berish uchun alohida Node worker ishlashi kerak.
+
+Worker ishga tushirish:
+
+```bash
+npm run telegram:live
+```
+
+Worker `TELEGRAM_ADMIN_SESSION` orqali admin profilga kelgan yangi shaxsiy xabarlarni eshitadi. `Jonli suhbat` yoqilgan bo'lsa, mijozga admin profil nomidan javob yuboradi va qayta spam qilmaslik uchun javob berilgan message IDlarni `LIVE_CHAT_MEMORY` markerida `DATA \ BAYTRIP` guruhiga saqlaydi.
+
+Kerakli envlar:
+
+```bash
+TELEGRAM_API_ID=123456
+TELEGRAM_API_HASH=abcdef123456
+TELEGRAM_ADMIN_SESSION=1AQA...
+TELEGRAM_STORAGE_CHAT_ID=-5025743465
+TELEGRAM_STORAGE_CHAT_TITLE=DATA \ BAYTRIP
+```
+
 ## BayClub narxlarini bot orqali o'zgartirish
 
 Admin panelda `BayClub narxlarini o'zgartirish` tugmasini bosing. Bot reply prompt beradi. Shu promptga quyidagi formatda reply qiling:
