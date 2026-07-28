@@ -1628,23 +1628,31 @@ function parseEmployeeListText(text) {
 }
 
 async function getLatestGroupLeadsConfig() {
-  return withAdminClient(async (client) => {
-    const topicIds = getGroupLeadsConfigTopicIds();
+  try {
+    return await withAdminClient(async (client) => {
+      const topicIds = getGroupLeadsConfigTopicIds();
 
-    for (const target of getStorageReadTargets(topicIds)) {
-      const entity = await client.getEntity(target.chatId);
-      for (const topicId of target.topicIds) {
-        const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
+      for (const target of getStorageReadTargets(topicIds)) {
+        try {
+          const entity = await client.getEntity(target.chatId);
+          for (const topicId of target.topicIds) {
+            const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
-        for await (const message of iterator) {
-          const parsed = parseMarkerJson(message.message, GROUP_LEADS_CONFIG_MARKER);
-          if (parsed) return normalizeGroupLeadsConfig(parsed);
+            for await (const message of iterator) {
+              const parsed = parseMarkerJson(message.message, GROUP_LEADS_CONFIG_MARKER);
+              if (parsed) return normalizeGroupLeadsConfig(parsed);
+            }
+          }
+        } catch {
+          // Storage group eski session uchun ko'rinmasa ham yangi sozlamani saqlash to'xtamasin.
         }
       }
-    }
 
+      return normalizeGroupLeadsConfig(null);
+    });
+  } catch {
     return normalizeGroupLeadsConfig(null);
-  });
+  }
 }
 
 async function saveGroupLeadsConfig(token, config) {
