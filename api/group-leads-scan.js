@@ -1,6 +1,7 @@
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
+const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 const DEFAULT_GROUP_LEAD_GROUPS = [
   { id: "-1001382725545", title: "Союз" },
   { id: "-1003546137685", title: "Levora B2B" },
@@ -136,6 +137,7 @@ function getStorageChatId() {
     process.env.TELEGRAM_INTERNAL_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_SETTINGS_CHAT_ID ||
+    DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID
   );
 }
@@ -154,6 +156,25 @@ function uniqueValues(values) {
 
 function getStorageChatIds() {
   return uniqueValues([getStorageChatId(), clean(process.env.TELEGRAM_CHAT_ID)]);
+}
+
+function getStorageReadTargets(topicIds = []) {
+  const storageChatId = getStorageChatId();
+  const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const cleanTopicIds = topicIds.filter((value) => Number.isFinite(value));
+  const targets = [];
+
+  if (storageChatId) {
+    targets.push({ chatId: storageChatId, topicIds: [undefined] });
+  }
+
+  if (mainChatId && mainChatId !== storageChatId) {
+    targets.push({ chatId: mainChatId, topicIds: [undefined, ...cleanTopicIds] });
+  } else if (targets.length > 0) {
+    targets[0].topicIds = [...targets[0].topicIds, ...cleanTopicIds];
+  }
+
+  return targets;
 }
 
 function getTopicSearchIds(...values) {
@@ -219,7 +240,6 @@ function getConfigTopicIds() {
 }
 
 function getLeadTopicId() {
-  if (!shouldUseGroupLeadTopics()) return undefined;
   return getTopicNumber(
     process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
     process.env.TELEGRAM_CONTACT_TOPIC_ID
@@ -297,11 +317,11 @@ function parseMarkerJson(text, marker) {
 
 async function readLatestMarker(client, marker) {
   const limit = Number(process.env.TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT || 150);
-  const topicIds = [undefined, ...getConfigTopicIds()];
+  const topicIds = getConfigTopicIds();
 
-  for (const chatId of getStorageChatIds()) {
-    const entity = await client.getEntity(chatId);
-    for (const topicId of topicIds) {
+  for (const target of getStorageReadTargets(topicIds)) {
+    const entity = await client.getEntity(target.chatId);
+    for (const topicId of target.topicIds) {
       const iterator = client.iterMessages(
         entity,
         buildMessageSearchOptions(Number.isFinite(limit) ? limit : 150, topicId)
@@ -468,7 +488,7 @@ function buildScanSummaryText(result) {
     "",
     `Guruhlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
-    `Guruhga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
+    `Topicga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
     `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
@@ -572,12 +592,12 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
 
 async function readRecentFeedback(client) {
   const limit = Number(process.env.TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT || 250);
-  const topicIds = [undefined, ...getConfigTopicIds()];
+  const topicIds = getConfigTopicIds();
   const feedback = [];
 
-  for (const chatId of getStorageChatIds()) {
-    const entity = await client.getEntity(chatId);
-    for (const topicId of topicIds) {
+  for (const target of getStorageReadTargets(topicIds)) {
+    const entity = await client.getEntity(target.chatId);
+    for (const topicId of target.topicIds) {
       const iterator = client.iterMessages(
         entity,
         buildMessageSearchOptions(Number.isFinite(limit) ? limit : 250, topicId)

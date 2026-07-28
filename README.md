@@ -1,6 +1,6 @@
 # Baytrip
 
-Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari, ichki va tashqi turlar, smart tur tavsiyasi, bron qilish formasi, murojaat formasi, aksiyalar obunasi va BayClub Card bo'limi bor. Arizalar Vercel serverless endpoint orqali Telegram guruhiga yuboriladi; odatiy arizalar topiclarga, guruhdan topilgan lidlar esa default holatda guruhning o'ziga tushadi.
+Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari, ichki va tashqi turlar, smart tur tavsiyasi, bron qilish formasi, murojaat formasi, aksiyalar obunasi va BayClub Card bo'limi bor. Arizalar Vercel serverless endpoint orqali Telegram guruhidagi topiclarga yuboriladi. Guruhdan topilgan lidlar ham avvalgidek `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tushadi; faqat botning ichki storage/config/xotira xabarlari alohida yopiq storage guruhga yozilishi mumkin.
 
 ## Asosiy imkoniyatlar
 
@@ -13,7 +13,7 @@ Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari
 - Bot orqali BayClub narxlarini o'zgartirish.
 - Bot admin panel: login/parol orqali boshqarish.
 - Bot orqali aksiyalarni obunachilarga admin profilidan yuborish.
-- Telegram profil session orqali turizm guruhlarini scan qilish va kalit so'zlar asosida lidlarni bitta guruhga yuborish.
+- Telegram profil session orqali turizm guruhlarini scan qilish va kalit so'zlar asosida lidlarni ichki lead topiciga yuborish.
 - Bot ichida `Oxirgi amallar` bo'limi: BayClub narx configlari, guruh lid sozlamalari va scan state yozuvlarini ko'rish.
 
 ## Texnologiyalar
@@ -53,7 +53,7 @@ Saytdan kelgan arizalar `POST /api/telegram` orqali Telegram guruhidagi topiclar
 - BayClub Card arizalari: `TELEGRAM_BAYCLUB_TOPIC_ID`
 - Aksiyalar obunasi: `TELEGRAM_PROMO_TOPIC_ID`
 - Oddiy murojaatlar: `TELEGRAM_CONTACT_TOPIC_ID`
-- Guruhlardan topilgan lidlar: default holatda `TELEGRAM_CHAT_ID` guruhining o'ziga tushadi. Alohida guruh kerak bo'lsa `TELEGRAM_GROUP_LEADS_CHAT_ID` ishlating.
+- Guruhlardan topilgan lidlar: `TELEGRAM_GROUP_LEADS_TOPIC_ID`
 
 Oddiy murojaatlar uchun alias env nomlar ham qo'llab-quvvatlanadi:
 
@@ -85,8 +85,7 @@ TELEGRAM_DOMESTIC_TOPIC_ID=3
 TELEGRAM_BAYCLUB_TOPIC_ID=4
 TELEGRAM_PROMO_TOPIC_ID=5
 TELEGRAM_CONTACT_TOPIC_ID=6
-# Ixtiyoriy: guruhdan topilgan lidlarni boshqa bitta guruhga yuborish
-TELEGRAM_GROUP_LEADS_CHAT_ID=-1001234567890
+TELEGRAM_GROUP_LEADS_TOPIC_ID=7
 ```
 
 Bot admin panel:
@@ -109,9 +108,11 @@ TELEGRAM_ADMIN_SESSION=1AQA...
 
 BayClub va guruh lid configlari endi default holatda topicga emas, bitta storage guruhga yoziladi. Alohida yopiq storage guruh ishlatish tavsiya qilinadi:
 
+Kodda default storage chat ID sifatida `-5025743465` ham fallback qilib qo'yilgan, lekin Vercelda env sifatida ham qo'yish tavsiya qilinadi.
+
 ```env
-TELEGRAM_STORAGE_CHAT_ID=-1009876543210
-# yoki TELEGRAM_INTERNAL_CHAT_ID=-1009876543210
+TELEGRAM_STORAGE_CHAT_ID=-5025743465
+# yoki TELEGRAM_INTERNAL_CHAT_ID=-5025743465
 ```
 
 Eski topic-based saqlash kerak bo'lsa, faqat shunda yoqing:
@@ -302,11 +303,11 @@ Tezkor command:
 
 ## Guruhlardan lid yig'ish
 
-Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 30 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z yoki tasdiqlangan lidlarga o'xshash belgilar topilsa, belgilangan guruhning o'ziga lid yuboradi.
+Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 30 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z yoki tasdiqlangan lidlarga o'xshash belgilar topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
 Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar alohida sozlanadi.
 
-`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 30 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa guruhga yuboradi. Tezkor command sifatida `/scan` ham ishlaydi.
+`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 30 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga yuboradi. Tezkor command sifatida `/scan` ham ishlaydi.
 
 Default kuzatiladigan guruhlar:
 
@@ -332,7 +333,7 @@ tur kerak, ekskursiya, avia, mehmonxona, gid kerak, 5 kishi
 
 Guruh chap tomonda public username yoki `-100...` ID bo'ladi. `=` dan keyingi qism ichki lid xabarida ko'rinadigan nom.
 
-Guruhdan lid topilganda mijozga avtomatik xabar ketmaydi. Lid avval guruhga `✅ Tasdiqlash` va `❌ Bekor` tugmalari bilan tushadi. Hodim tasdiqlashni bosadi, o'z ismini tanlaydi, shundan keyin profil session orqali mijoz username'iga birinchi xabar yuboriladi. Bekor bosilganda lid xabari o'chiriladi va “Bekor qilindi...” degan qo'shimcha xabar chiqmaydi. Tasdiqlangan va bekor qilingan lidlar storage guruhga `GROUP_LEAD_FEEDBACK` sifatida kodlangan ko'rinishda yoziladi; keyingi scanlar shu xotiradan foydalanib tasdiqlanganlarga o'xshash xabarlarni ko'proq lid qiladi va bekor qilinganlarga o'xshashlarini pasaytiradi.
+Guruhdan lid topilganda mijozga avtomatik xabar ketmaydi. Lid avval ichki lead topicga `✅ Tasdiqlash` va `❌ Bekor` tugmalari bilan tushadi. Hodim tasdiqlashni bosadi, o'z ismini tanlaydi, shundan keyin profil session orqali mijoz username'iga birinchi xabar yuboriladi. Bekor bosilganda lid xabari o'chiriladi va “Bekor qilindi...” degan qo'shimcha xabar chiqmaydi. Tasdiqlangan va bekor qilingan lidlar storage guruhga `GROUP_LEAD_FEEDBACK` sifatida kodlangan ko'rinishda yoziladi; keyingi scanlar shu xotiradan foydalanib tasdiqlanganlarga o'xshash xabarlarni ko'proq lid qiladi va bekor qilinganlarga o'xshashlarini pasaytiradi.
 
 `👤 Hodimlar` uchun format:
 
@@ -348,25 +349,23 @@ TELEGRAM_GROUP_LEADS_EMPLOYEES=Shoxruza,Sohibjon,Aziz
 
 Botdan hodimlar kiritilmagan va env ham bo'sh bo'lsa, tasdiqlagan Telegram foydalanuvchisining ismi bitta tugma sifatida chiqadi.
 
-Guruhdan topilgan lidlar tushadigan bitta guruh:
+Guruhdan topilgan lidlar tushadigan topic:
 
 ```env
-# Ixtiyoriy. Berilmasa TELEGRAM_CHAT_ID ishlatiladi.
-TELEGRAM_GROUP_LEADS_CHAT_ID=<Guruh ID>
+TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlari topic ID>
 ```
 
 Config, scan state va lid xotirasi yoziladigan storage guruh:
 
 ```env
 # Ixtiyoriy. Berilmasa TELEGRAM_CHAT_ID ishlatiladi.
-TELEGRAM_STORAGE_CHAT_ID=<Storage guruh ID>
+TELEGRAM_STORAGE_CHAT_ID=-5025743465
 ```
 
-Topicga qaytish kerak bo'lsa:
+Storage ham eski topic ichiga yozilsin desangiz:
 
 ```env
 TELEGRAM_GROUP_LEADS_USE_TOPICS=true
-TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlari topic ID>
 TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<Sozlamalar topic ID>
 ```
 

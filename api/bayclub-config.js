@@ -1,4 +1,5 @@
 const PRICE_CONFIG_MARKER = "BAYCLUB_PRICE_CONFIG";
+const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 
 function clean(value, fallback = "") {
   const text = String(value ?? "").trim();
@@ -10,6 +11,7 @@ function getStorageChatId() {
     process.env.TELEGRAM_INTERNAL_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_SETTINGS_CHAT_ID ||
+    DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID
   );
 }
@@ -20,6 +22,25 @@ function uniqueValues(values) {
 
 function getStorageChatIds() {
   return uniqueValues([getStorageChatId(), clean(process.env.TELEGRAM_CHAT_ID)]);
+}
+
+function getStorageReadTargets(topicIds = []) {
+  const storageChatId = getStorageChatId();
+  const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const cleanTopicIds = topicIds.filter((value) => Number.isFinite(value));
+  const targets = [];
+
+  if (storageChatId) {
+    targets.push({ chatId: storageChatId, topicIds: [undefined] });
+  }
+
+  if (mainChatId && mainChatId !== storageChatId) {
+    targets.push({ chatId: mainChatId, topicIds: [undefined, ...cleanTopicIds] });
+  } else if (targets.length > 0) {
+    targets[0].topicIds = [...targets[0].topicIds, ...cleanTopicIds];
+  }
+
+  return targets;
 }
 
 function buildMessageSearchOptions(limit, topicId) {
@@ -117,11 +138,11 @@ export default async function handler(req, res) {
     const plans = await withAdminClient(async (client) => {
       const configs = [];
       const wantedPlans = new Set(["3 oy", "6 oy", "12 oy"]);
-      const topicIds = [undefined, ...getBayClubConfigTopicIds()];
+      const topicIds = getBayClubConfigTopicIds();
 
-      for (const chatId of getStorageChatIds()) {
-        const entity = await client.getEntity(chatId);
-        for (const topicId of topicIds) {
+      for (const target of getStorageReadTargets(topicIds)) {
+        const entity = await client.getEntity(target.chatId);
+        for (const topicId of target.topicIds) {
           const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
           for await (const message of iterator) {

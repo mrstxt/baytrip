@@ -46,6 +46,8 @@ const DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT = 30;
 const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
 const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 30;
 
+const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
+
 let groupLeadEmployeesCache = null;
 const pendingAdminLogins = new Map();
 
@@ -156,6 +158,7 @@ function getStorageChatId() {
     process.env.TELEGRAM_INTERNAL_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_SETTINGS_CHAT_ID ||
+    DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID,
     ""
   );
@@ -166,6 +169,25 @@ function getStorageChatIds() {
     getStorageChatId(),
     clean(process.env.TELEGRAM_CHAT_ID, ""),
   ]);
+}
+
+function getStorageReadTargets(topicIds = []) {
+  const storageChatId = getStorageChatId();
+  const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const cleanTopicIds = topicIds.filter((value) => Number.isFinite(value));
+  const targets = [];
+
+  if (storageChatId) {
+    targets.push({ chatId: storageChatId, topicIds: [undefined] });
+  }
+
+  if (mainChatId && mainChatId !== storageChatId) {
+    targets.push({ chatId: mainChatId, topicIds: [undefined, ...cleanTopicIds] });
+  } else if (targets.length > 0) {
+    targets[0].topicIds = [...targets[0].topicIds, ...cleanTopicIds];
+  }
+
+  return targets;
 }
 
 function getTopicSearchIds(...values) {
@@ -613,11 +635,11 @@ async function getLatestBayClubPriceConfig() {
   return withAdminClient(async (client) => {
     const configs = [];
     const wantedPlans = new Set(["3 oy", "6 oy", "12 oy"]);
-    const topicIds = [undefined, ...getBayClubConfigTopicIds()];
+    const topicIds = getBayClubConfigTopicIds();
 
-    for (const chatId of getStorageChatIds()) {
-      const entity = await client.getEntity(chatId);
-      for (const topicId of topicIds) {
+    for (const target of getStorageReadTargets(topicIds)) {
+      const entity = await client.getEntity(target.chatId);
+      for (const topicId of target.topicIds) {
         const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
         for await (const message of iterator) {
@@ -1067,14 +1089,13 @@ async function getRecentAdminActions() {
     const actions = [];
     const limit = Number(process.env.TELEGRAM_ADMIN_ACTIONS_SCAN_LIMIT || 80);
     const topicIds = [
-      undefined,
       ...getBayClubConfigTopicIds(),
       ...getGroupLeadsConfigTopicIds(),
     ];
 
-    for (const chatId of getStorageChatIds()) {
-      const entity = await client.getEntity(chatId);
-      for (const topicId of topicIds) {
+    for (const target of getStorageReadTargets(topicIds)) {
+      const entity = await client.getEntity(target.chatId);
+      for (const topicId of target.topicIds) {
         const iterator = client.iterMessages(
           entity,
           buildMessageSearchOptions(Number.isFinite(limit) ? limit : 80, topicId)
@@ -1425,7 +1446,7 @@ function buildLeadScannerResultMessage(result) {
     "",
     `Guruhlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
-    `Guruhga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
+    `Topicga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
     `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
@@ -1451,7 +1472,7 @@ async function runLeadScannerNow(token, chatId, baseUrl) {
       "<b>🧭 Lid skaner boshlandi</b>",
       "",
       "Har bir sozlangan guruhdan oxirgi 30 ta xabar tekshiriladi.",
-      "Oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa, belgilangan guruhga yuboriladi.",
+      "Oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa, belgilangan topicga yuboriladi.",
     ].join("\n")
   );
 
@@ -1610,11 +1631,11 @@ function parseEmployeeListText(text) {
 
 async function getLatestGroupLeadsConfig() {
   return withAdminClient(async (client) => {
-    const topicIds = [undefined, ...getGroupLeadsConfigTopicIds()];
+    const topicIds = getGroupLeadsConfigTopicIds();
 
-    for (const chatId of getStorageChatIds()) {
-      const entity = await client.getEntity(chatId);
-      for (const topicId of topicIds) {
+    for (const target of getStorageReadTargets(topicIds)) {
+      const entity = await client.getEntity(target.chatId);
+      for (const topicId of target.topicIds) {
         const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
         for await (const message of iterator) {
