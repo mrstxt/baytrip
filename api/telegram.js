@@ -28,13 +28,14 @@ const LIVE_CHAT_MEMORY_MARKER = "LIVE_CHAT_MEMORY";
 const GROUP_LEAD_CONFIRM_CALLBACK = "gl_confirm";
 const GROUP_LEAD_CANCEL_CALLBACK = "gl_cancel";
 const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
-const LIVE_CHAT_STATS_CALLBACK = "live_stats";
-const LIVE_CHAT_TOGGLE_CALLBACK = "live_toggle";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
 const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
 const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
 const BUTTON_LEAD_SCANNER = "🧭 Lid skaner";
 const BUTTON_LIVE_CHAT = "💬 Jonli suhbat";
+const BUTTON_LIVE_CHAT_STATS = "📊 Suhbatlashuv statistikasi";
+const BUTTON_LIVE_CHAT_TOGGLE_ON = "▶️ Suhbatni yoqish";
+const BUTTON_LIVE_CHAT_TOGGLE_OFF = "⏸ Suhbatni o'chirish";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
 const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
@@ -475,10 +476,13 @@ function buildGroupLeadsKeyboard() {
 
 function buildLiveChatKeyboard(config) {
   return {
-    inline_keyboard: [
-      [{ text: "📊 Suhbatlashuv statistikasi", callback_data: LIVE_CHAT_STATS_CALLBACK }],
-      [{ text: config?.enabled ? "⏸ Suhbatni o'chirish" : "▶️ Suhbatni yoqish", callback_data: LIVE_CHAT_TOGGLE_CALLBACK }],
+    keyboard: [
+      [{ text: BUTTON_LIVE_CHAT_STATS }],
+      [{ text: config?.enabled ? BUTTON_LIVE_CHAT_TOGGLE_OFF : BUTTON_LIVE_CHAT_TOGGLE_ON }],
+      [{ text: BUTTON_BACK }],
     ],
+    resize_keyboard: true,
+    is_persistent: true,
   };
 }
 
@@ -2690,16 +2694,6 @@ async function handleBotUpdate(body, token, context = {}) {
       return { ok: true };
     }
 
-    if (data === LIVE_CHAT_STATS_CALLBACK) {
-      await sendLiveChatStats(token, chatId);
-      return { ok: true };
-    }
-
-    if (data === LIVE_CHAT_TOGGLE_CALLBACK) {
-      await toggleLiveChat(token, chatId);
-      return { ok: true };
-    }
-
     if (data === "logout") {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
         reply_markup: buildRemoveKeyboard(),
@@ -2847,6 +2841,9 @@ async function handleBotUpdate(body, token, context = {}) {
     BUTTON_GROUP_LEADS,
     BUTTON_LEAD_SCANNER,
     BUTTON_LIVE_CHAT,
+    BUTTON_LIVE_CHAT_STATS,
+    BUTTON_LIVE_CHAT_TOGGLE_ON,
+    BUTTON_LIVE_CHAT_TOGGLE_OFF,
     BUTTON_GROUPS,
     BUTTON_KEYWORDS,
     BUTTON_EMPLOYEES,
@@ -2871,6 +2868,10 @@ async function handleBotUpdate(body, token, context = {}) {
       await runLeadScannerNow(token, chatId, context.baseUrl);
     } else if (text === BUTTON_LIVE_CHAT) {
       await sendLiveChatMenu(token, chatId);
+    } else if (text === BUTTON_LIVE_CHAT_STATS) {
+      await sendLiveChatStats(token, chatId);
+    } else if (text === BUTTON_LIVE_CHAT_TOGGLE_ON || text === BUTTON_LIVE_CHAT_TOGGLE_OFF) {
+      await toggleLiveChat(token, chatId);
     } else if (text === BUTTON_GROUPS) {
       await sendGroupLeadsGroupsPrompt(token, chatId);
     } else if (text === BUTTON_KEYWORDS) {
@@ -2882,7 +2883,6 @@ async function handleBotUpdate(body, token, context = {}) {
     } else if (text === BUTTON_RECENT_ACTIONS) {
       await sendRecentAdminActions(token, chatId);
     } else if (text === BUTTON_CLEANUP) {
-      await deleteBotMessage(token, chatId, message.message_id);
       await runBotMessageCleanup(token, chatId);
     } else if (text === BUTTON_LOGOUT) {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
