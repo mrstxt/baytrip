@@ -44,7 +44,7 @@ const DEFAULT_GROUP_LEAD_GROUPS = [
 const DEFAULT_GROUP_LEAD_KEYWORD_COUNT = 100;
 const DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT = 30;
 const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
-const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 30;
+const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 100;
 
 const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 
@@ -1446,7 +1446,7 @@ function buildLeadScannerResultMessage(result) {
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
     `Topicga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
-    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
+    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? DEFAULT_GROUP_LEAD_MESSAGE_LIMIT)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
     `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
     errors.length ? "" : "",

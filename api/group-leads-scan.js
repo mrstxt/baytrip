@@ -391,8 +391,8 @@ function getScanWindowMinutes(config) {
 }
 
 function getScanMessageLimit() {
-  const parsed = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 30);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+  const parsed = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 100);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
 }
 
 function getMessageDate(message) {
@@ -487,7 +487,7 @@ function buildScanSummaryText(result) {
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
     `Topicga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
-    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
+    `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 100)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
     `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
     errors.length ? "" : "",

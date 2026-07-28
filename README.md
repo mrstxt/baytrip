@@ -130,7 +130,7 @@ Qo'shimcha sozlamalar:
 
 ```env
 TELEGRAM_PROMO_SCAN_LIMIT=500
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=30
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=100
 TELEGRAM_GROUP_LEADS_SCAN_HISTORY=false
 TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT=150
 TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT=250
@@ -306,11 +306,11 @@ Tezkor command:
 
 ## Guruhlardan lid yig'ish
 
-Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 30 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z yoki tasdiqlangan lidlarga o'xshash belgilar topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
+Bu funksiya Telegram profil session orqali profil a'zo bo'lgan guruhlarni scan qiladi. Har soatda ishga tushganda har bir guruhdagi eng so'nggi 100 ta xabarni ko'radi, oxirgi 1 soat ichidagi xabar ichida belgilangan kalit so'z yoki tasdiqlangan lidlarga o'xshash belgilar topilsa, ichki `Guruh lidlari` topiciga lid yuboradi.
 
 Admin panelda `🔎 Guruh lidlari` tugmasini bosing. Guruhlar va kalit so'zlar alohida sozlanadi.
 
-`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 30 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga yuboradi. Tezkor command sifatida `/scan` ham ishlaydi.
+`🧭 Lid skaner` tugmasi test va manual scan uchun ishlaydi. Tugma bosilganda bot `/api/group-leads-scan` endpointini hoziroq chaqiradi: har bir sozlangan guruhdan eng so'nggi 100 ta xabarni tekshiradi, oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga yuboradi. Tezkor command sifatida `/scan` ham ishlaydi.
 
 Default kuzatiladigan guruhlar:
 
@@ -413,7 +413,7 @@ Default qiymatlar:
 
 ```env
 TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES=60
-TELEGRAM_GROUP_LEADS_SCAN_LIMIT=30
+TELEGRAM_GROUP_LEADS_SCAN_LIMIT=100
 TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT=250
 ```
 
