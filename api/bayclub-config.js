@@ -5,6 +5,27 @@ function clean(value, fallback = "") {
   return text || fallback;
 }
 
+function getStorageChatId() {
+  return clean(
+    process.env.TELEGRAM_INTERNAL_CHAT_ID ||
+    process.env.TELEGRAM_STORAGE_CHAT_ID ||
+    process.env.TELEGRAM_SETTINGS_CHAT_ID ||
+    process.env.TELEGRAM_CHAT_ID
+  );
+}
+
+function uniqueValues(values) {
+  return values.filter((value, index) => value && values.indexOf(value) === index);
+}
+
+function getStorageChatIds() {
+  return uniqueValues([getStorageChatId(), clean(process.env.TELEGRAM_CHAT_ID)]);
+}
+
+function buildMessageSearchOptions(limit, topicId) {
+  return topicId ? { limit, replyTo: topicId } : { limit };
+}
+
 function getAdminProfileConfig() {
   const apiId = Number(process.env.TELEGRAM_API_ID);
   const apiHash = clean(process.env.TELEGRAM_API_HASH);
@@ -61,9 +82,22 @@ function parseConfigMessage(text) {
   if (!raw.includes(PRICE_CONFIG_MARKER)) return null;
   const jsonStart = raw.indexOf("{");
   const jsonEnd = raw.lastIndexOf("}");
-  if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
+
+  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+    try {
+      return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      // Eski JSON format buzilgan bo'lsa, pastdagi yopiq format ham tekshiriladi.
+    }
+  }
+
+  const markerIndex = raw.indexOf(PRICE_CONFIG_MARKER);
+  const afterMarker = raw.slice(markerIndex + PRICE_CONFIG_MARKER.length);
+  const encoded = afterMarker.match(/[A-Za-z0-9+/]{16,}={0,2}/)?.[0];
+  if (!encoded) return null;
+
   try {
-    return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
   } catch {
     return null;
   }
@@ -80,27 +114,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const topicIds = getBayClubConfigTopicIds();
-    if (topicIds.length === 0) {
-      return res.status(200).json({ ok: true, plans: {} });
-    }
-
     const plans = await withAdminClient(async (client) => {
-      const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
       const configs = [];
       const wantedPlans = new Set(["3 oy", "6 oy", "12 oy"]);
+      const topicIds = [undefined, ...getBayClubConfigTopicIds()];
 
-      for (const topicId of topicIds) {
-        const iterator = client.iterMessages(entity, { limit: 150, replyTo: topicId });
+      for (const chatId of getStorageChatIds()) {
+        const entity = await client.getEntity(chatId);
+        for (const topicId of topicIds) {
+          const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
-        for await (const message of iterator) {
-          const parsed = parseConfigMessage(message.message);
-          if (!parsed) continue;
+          for await (const message of iterator) {
+            const parsed = parseConfigMessage(message.message);
+            if (!parsed) continue;
 
-          configs.unshift(parsed);
-          const merged = mergePriceConfigs(configs);
-          if ([...wantedPlans].every((plan) => merged[plan])) {
-            return merged;
+            configs.unshift(parsed);
+            const merged = mergePriceConfigs(configs);
+            if ([...wantedPlans].every((plan) => merged[plan])) {
+              return merged;
+            }
           }
         }
       }

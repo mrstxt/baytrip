@@ -122,6 +122,65 @@ function clean(value, fallback = "") {
   return text || fallback;
 }
 
+function isEnabledEnv(value) {
+  return ["1", "true", "yes", "on"].includes(clean(value).toLowerCase());
+}
+
+function shouldUseGroupLeadTopics() {
+  return isEnabledEnv(process.env.TELEGRAM_GROUP_LEADS_USE_TOPICS || process.env.TELEGRAM_USE_TOPIC_STORAGE);
+}
+
+function getStorageChatId() {
+  return clean(
+    process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
+    process.env.TELEGRAM_INTERNAL_CHAT_ID ||
+    process.env.TELEGRAM_STORAGE_CHAT_ID ||
+    process.env.TELEGRAM_SETTINGS_CHAT_ID ||
+    process.env.TELEGRAM_CHAT_ID
+  );
+}
+
+function getLeadOutputChatId() {
+  return clean(
+    process.env.TELEGRAM_GROUP_LEADS_CHAT_ID ||
+    process.env.TELEGRAM_LEADS_CHAT_ID ||
+    process.env.TELEGRAM_CHAT_ID
+  );
+}
+
+function uniqueValues(values) {
+  return values.filter((value, index) => value && values.indexOf(value) === index);
+}
+
+function getStorageChatIds() {
+  return uniqueValues([getStorageChatId(), clean(process.env.TELEGRAM_CHAT_ID)]);
+}
+
+function getTopicSearchIds(...values) {
+  return values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .filter((value, index, list) => list.indexOf(value) === index);
+}
+
+function buildMessageSearchOptions(limit, topicId) {
+  return topicId ? { limit, replyTo: topicId } : { limit };
+}
+
+function encodeMarkerPayload(payload) {
+  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+}
+
+function buildMarkerText(marker, payload, title = "") {
+  return [
+    title,
+    title ? "" : "",
+    `<b>${marker}</b>`,
+    "",
+    `<code>${escapeHtml(encodeMarkerPayload(payload))}</code>`,
+  ].filter((line, index, lines) => line || (lines[index - 1] && lines[index + 1])).join("\n");
+}
+
 function getAdminProfileConfig() {
   const apiId = Number(process.env.TELEGRAM_API_ID);
   const apiHash = clean(process.env.TELEGRAM_API_HASH);
@@ -143,6 +202,7 @@ function getTopicNumber(...values) {
 }
 
 function getConfigTopicId() {
+  if (!shouldUseGroupLeadTopics()) return undefined;
   return getTopicNumber(
     process.env.TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID,
     process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
@@ -150,7 +210,16 @@ function getConfigTopicId() {
   );
 }
 
+function getConfigTopicIds() {
+  return getTopicSearchIds(
+    process.env.TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID,
+    process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
+    process.env.TELEGRAM_CONTACT_TOPIC_ID
+  );
+}
+
 function getLeadTopicId() {
+  if (!shouldUseGroupLeadTopics()) return undefined;
   return getTopicNumber(
     process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
     process.env.TELEGRAM_CONTACT_TOPIC_ID
@@ -205,27 +274,44 @@ function parseMarkerJson(text, marker) {
   if (!raw.includes(marker)) return null;
   const jsonStart = raw.indexOf("{");
   const jsonEnd = raw.lastIndexOf("}");
-  if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
+
+  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+    try {
+      return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      // Eski JSON format buzilgan bo'lsa, pastdagi yopiq format ham tekshiriladi.
+    }
+  }
+
+  const markerIndex = raw.indexOf(marker);
+  const afterMarker = raw.slice(markerIndex + marker.length);
+  const encoded = afterMarker.match(/[A-Za-z0-9+/]{16,}={0,2}/)?.[0];
+  if (!encoded) return null;
+
   try {
-    return JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+    return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
   } catch {
     return null;
   }
 }
 
 async function readLatestMarker(client, marker) {
-  const topicId = getConfigTopicId();
-  if (!topicId) return null;
+  const limit = Number(process.env.TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT || 150);
+  const topicIds = [undefined, ...getConfigTopicIds()];
 
-  const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
-  const iterator = client.iterMessages(entity, {
-    limit: Number(process.env.TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT || 150),
-    replyTo: topicId,
-  });
+  for (const chatId of getStorageChatIds()) {
+    const entity = await client.getEntity(chatId);
+    for (const topicId of topicIds) {
+      const iterator = client.iterMessages(
+        entity,
+        buildMessageSearchOptions(Number.isFinite(limit) ? limit : 150, topicId)
+      );
 
-  for await (const message of iterator) {
-    const parsed = parseMarkerJson(message.message, marker);
-    if (parsed) return parsed;
+      for await (const message of iterator) {
+        const parsed = parseMarkerJson(message.message, marker);
+        if (parsed) return parsed;
+      }
+    }
   }
 
   return null;
@@ -382,7 +468,7 @@ function buildScanSummaryText(result) {
     "",
     `Guruhlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
-    `Topicga tashlangan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
+    `Guruhga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
     `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? 30)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
@@ -485,31 +571,34 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
 }
 
 async function readRecentFeedback(client) {
-  const topicId = getConfigTopicId();
-  if (!topicId) return [];
-
-  const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
-  const iterator = client.iterMessages(entity, {
-    limit: Number(process.env.TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT || 250),
-    replyTo: topicId,
-  });
+  const limit = Number(process.env.TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT || 250);
+  const topicIds = [undefined, ...getConfigTopicIds()];
   const feedback = [];
 
-  for await (const message of iterator) {
-    const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
-    if (parsed) feedback.push(parsed);
+  for (const chatId of getStorageChatIds()) {
+    const entity = await client.getEntity(chatId);
+    for (const topicId of topicIds) {
+      const iterator = client.iterMessages(
+        entity,
+        buildMessageSearchOptions(Number.isFinite(limit) ? limit : 250, topicId)
+      );
+
+      for await (const message of iterator) {
+        const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
+        if (parsed) feedback.push(parsed);
+      }
+    }
   }
 
   return feedback;
 }
 
 async function saveState(token, state, scanResult = null) {
-  const chatId = clean(process.env.TELEGRAM_CHAT_ID);
+  const chatId = getStorageChatId();
   const topicId = getConfigTopicId();
-  const lines = scanResult
-    ? [buildScanSummaryText(scanResult), "", `<b>${GROUP_LEADS_STATE_MARKER}</b>`, "", `<code>${escapeHtml(JSON.stringify(state))}</code>`]
-    : [`<b>${GROUP_LEADS_STATE_MARKER}</b>`, "", `<code>${escapeHtml(JSON.stringify(state))}</code>`];
-  const text = lines.join("\n");
+  const text = scanResult
+    ? [buildScanSummaryText(scanResult), "", buildMarkerText(GROUP_LEADS_STATE_MARKER, state)].join("\n")
+    : buildMarkerText(GROUP_LEADS_STATE_MARKER, state);
 
   await sendBotMessage(token, chatId, text, topicId ? { message_thread_id: topicId } : {});
 }
@@ -581,8 +670,9 @@ export default async function handler(req, res) {
   }
 
   const token = clean(process.env.TELEGRAM_BOT_TOKEN);
-  const chatId = clean(process.env.TELEGRAM_CHAT_ID);
-  if (!token || !chatId) {
+  const chatId = getLeadOutputChatId();
+  const storageChatId = getStorageChatId();
+  if (!token || !chatId || !storageChatId) {
     return res.status(500).json({ ok: false, error: "Telegram bot sozlamalari kiritilmagan." });
   }
 
