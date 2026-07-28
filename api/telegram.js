@@ -49,6 +49,7 @@ const DEFAULT_GROUP_LEAD_SCAN_WINDOW_MINUTES = 60;
 const DEFAULT_GROUP_LEAD_MESSAGE_LIMIT = 100;
 
 const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
+const DEFAULT_STORAGE_CHAT_TITLE = "DATA \\ BAYTRIP";
 
 let groupLeadEmployeesCache = null;
 const pendingAdminLogins = new Map();
@@ -155,6 +156,10 @@ function uniqueValues(values) {
   return values.filter((value, index) => value && values.indexOf(value) === index);
 }
 
+function normalizeTitle(value) {
+  return clean(value, "").toLowerCase().replace(/\s+/g, " ");
+}
+
 function getStorageChatId() {
   return clean(
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
@@ -169,6 +174,20 @@ function getStorageChatIds() {
     getStorageChatId(),
     clean(process.env.TELEGRAM_CHAT_ID, ""),
   ]);
+}
+
+function getStorageChatTitles() {
+  return uniqueValues([
+    clean(process.env.TELEGRAM_STORAGE_CHAT_TITLE, ""),
+    DEFAULT_STORAGE_CHAT_TITLE,
+  ].map(normalizeTitle));
+}
+
+function isStorageTitleMatch(title) {
+  const normalized = normalizeTitle(title);
+  if (!normalized) return false;
+  const wantedTitles = getStorageChatTitles();
+  return wantedTitles.includes(normalized) || (normalized.includes("data") && normalized.includes("baytrip"));
 }
 
 function getStorageReadTargets(topicIds = []) {
@@ -221,6 +240,30 @@ function getTelegramEntityInput(chatId) {
     return new Api.PeerChat({ chatId: id });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
+}
+
+async function getReadableEntities(client, chatId) {
+  const entities = [];
+
+  try {
+    entities.push(await client.getEntity(getTelegramEntityInput(chatId)));
+  } catch {
+    // Dialog title fallback quyida sinab ko'riladi.
+  }
+
+  try {
+    const dialogs = await client.getDialogs({ limit: 500 });
+    for (const dialog of dialogs) {
+      const entity = dialog.entity;
+      if (isStorageTitleMatch(entity?.title || dialog.title) && !entities.some((item) => String(item?.id) === String(entity?.id))) {
+        entities.push(entity);
+      }
+    }
+  } catch {
+    // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
+  }
+
+  return entities;
 }
 
 function encodeMarkerPayload(payload) {
@@ -1128,16 +1171,18 @@ async function getRecentAdminActions() {
     ];
 
     for (const target of getStorageReadTargets(topicIds)) {
-      const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
-      for (const topicId of target.topicIds) {
-        const iterator = client.iterMessages(
-          entity,
-          buildMessageSearchOptions(Number.isFinite(limit) ? limit : 80, topicId)
-        );
+      const entities = await getReadableEntities(client, target.chatId);
+      for (const entity of entities) {
+        for (const topicId of target.topicIds) {
+          const iterator = client.iterMessages(
+            entity,
+            buildMessageSearchOptions(Number.isFinite(limit) ? limit : 80, topicId)
+          );
 
-        for await (const message of iterator) {
-          const action = parseActionMessage(message);
-          if (action) actions.push({ ...action, topicId: topicId || "asosiy guruh" });
+          for await (const message of iterator) {
+            const action = parseActionMessage(message);
+            if (action) actions.push({ ...action, topicId: topicId || "asosiy guruh" });
+          }
         }
       }
     }
@@ -1670,13 +1715,15 @@ async function getLatestGroupLeadsConfig() {
 
       for (const target of getStorageReadTargets(topicIds)) {
         try {
-          const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
-          for (const topicId of target.topicIds) {
-            const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
+          const entities = await getReadableEntities(client, target.chatId);
+          for (const entity of entities) {
+            for (const topicId of target.topicIds) {
+              const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
-            for await (const message of iterator) {
-              const parsed = parseMarkerJson(message.message, GROUP_LEADS_CONFIG_MARKER);
-              if (parsed) return normalizeGroupLeadsConfig(parsed);
+              for await (const message of iterator) {
+                const parsed = parseMarkerJson(message.message, GROUP_LEADS_CONFIG_MARKER);
+                if (parsed) return normalizeGroupLeadsConfig(parsed);
+              }
             }
           }
         } catch {

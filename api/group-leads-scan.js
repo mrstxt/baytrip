@@ -4,6 +4,7 @@ const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
 const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
+const DEFAULT_STORAGE_CHAT_TITLE = "DATA \\ BAYTRIP";
 const DEFAULT_GROUP_LEAD_GROUPS = [
   { id: "-1001382725545", title: "Союз" },
   { id: "-1003546137685", title: "Levora B2B" },
@@ -153,8 +154,26 @@ function uniqueValues(values) {
   return values.filter((value, index) => value && values.indexOf(value) === index);
 }
 
+function normalizeTitle(value) {
+  return clean(value).toLowerCase().replace(/\s+/g, " ");
+}
+
 function getStorageChatIds() {
   return uniqueValues([getStorageChatId(), clean(process.env.TELEGRAM_CHAT_ID)]);
+}
+
+function getStorageChatTitles() {
+  return uniqueValues([
+    clean(process.env.TELEGRAM_STORAGE_CHAT_TITLE),
+    DEFAULT_STORAGE_CHAT_TITLE,
+  ].map(normalizeTitle));
+}
+
+function isStorageTitleMatch(title) {
+  const normalized = normalizeTitle(title);
+  if (!normalized) return false;
+  const wantedTitles = getStorageChatTitles();
+  return wantedTitles.includes(normalized) || (normalized.includes("data") && normalized.includes("baytrip"));
 }
 
 function getStorageReadTargets(topicIds = []) {
@@ -319,16 +338,18 @@ async function readLatestMarker(client, marker) {
   const topicIds = getConfigTopicIds();
 
   for (const target of getStorageReadTargets(topicIds)) {
-    const entity = await client.getEntity(getEntityInput(target.chatId));
-    for (const topicId of target.topicIds) {
-      const iterator = client.iterMessages(
-        entity,
-        buildMessageSearchOptions(Number.isFinite(limit) ? limit : 150, topicId)
-      );
+    const entities = await getReadableEntities(client, target.chatId);
+    for (const entity of entities) {
+      for (const topicId of target.topicIds) {
+        const iterator = client.iterMessages(
+          entity,
+          buildMessageSearchOptions(Number.isFinite(limit) ? limit : 150, topicId)
+        );
 
-      for await (const message of iterator) {
-        const parsed = parseMarkerJson(message.message, marker);
-        if (parsed) return parsed;
+        for await (const message of iterator) {
+          const parsed = parseMarkerJson(message.message, marker);
+          if (parsed) return parsed;
+        }
       }
     }
   }
@@ -449,6 +470,30 @@ function getEntityInput(groupId) {
     return new Api.PeerChat({ chatId: id });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
+}
+
+async function getReadableEntities(client, chatId) {
+  const entities = [];
+
+  try {
+    entities.push(await client.getEntity(getEntityInput(chatId)));
+  } catch {
+    // Dialog title fallback quyida sinab ko'riladi.
+  }
+
+  try {
+    const dialogs = await client.getDialogs({ limit: 500 });
+    for (const dialog of dialogs) {
+      const entity = dialog.entity;
+      if (isStorageTitleMatch(entity?.title || dialog.title) && !entities.some((item) => String(item?.id) === String(entity?.id))) {
+        entities.push(entity);
+      }
+    }
+  } catch {
+    // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
+  }
+
+  return entities;
 }
 
 function formatDate(date) {
@@ -608,16 +653,18 @@ async function readRecentFeedback(client) {
   const feedback = [];
 
   for (const target of getStorageReadTargets(topicIds)) {
-    const entity = await client.getEntity(getEntityInput(target.chatId));
-    for (const topicId of target.topicIds) {
-      const iterator = client.iterMessages(
-        entity,
-        buildMessageSearchOptions(Number.isFinite(limit) ? limit : 250, topicId)
-      );
+    const entities = await getReadableEntities(client, target.chatId);
+    for (const entity of entities) {
+      for (const topicId of target.topicIds) {
+        const iterator = client.iterMessages(
+          entity,
+          buildMessageSearchOptions(Number.isFinite(limit) ? limit : 250, topicId)
+        );
 
-      for await (const message of iterator) {
-        const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
-        if (parsed) feedback.push(parsed);
+        for await (const message of iterator) {
+          const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
+          if (parsed) feedback.push(parsed);
+        }
       }
     }
   }
