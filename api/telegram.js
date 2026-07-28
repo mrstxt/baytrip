@@ -680,13 +680,25 @@ async function getLatestBayClubPriceConfig() {
 async function saveBayClubPriceConfig(token, config) {
   const chatId = getStorageChatId();
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
+  const text = buildMarkerText(PRICE_CONFIG_MARKER, config);
 
   await sendBotMessage(
     token,
     chatId,
-    buildMarkerText(PRICE_CONFIG_MARKER, config),
+    text,
     getStorageMessageOptions()
   );
+
+  const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const bayClubTopicId = parseTopicId(process.env.TELEGRAM_BAYCLUB_TOPIC_ID);
+  if (mainChatId && mainChatId !== chatId && bayClubTopicId) {
+    await sendBotMessage(
+      token,
+      mainChatId,
+      text,
+      { message_thread_id: bayClubTopicId }
+    );
+  }
 }
 
 function getGroupLeadsConfigTopicId() {
