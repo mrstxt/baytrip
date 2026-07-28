@@ -3,6 +3,10 @@
     {
       "path": "/api/telegram?task=daily-maintenance",
       "schedule": "5 19 * * *"
+    },
+    {
+      "path": "/api/telegram?task=live-chat-scan",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -659,6 +659,8 @@ function normalizeLiveChatConfig(config) {
   return {
     enabled: config?.enabled === true,
     analysisOnly: config?.enabled !== true,
+    enabledAt: clean(config?.enabledAt, ""),
+    disabledAt: clean(config?.disabledAt, ""),
     updatedAt: clean(config?.updatedAt, new Date().toISOString()),
   };
 }
@@ -820,24 +822,34 @@ async function runLiveChatAutomation(token) {
   const memory = await getLiveChatMemory();
   const answered = new Set(Object.values(memory.answeredMessages || {}).map((value) => Number(value)).filter(Boolean));
   const maxReplies = Number(process.env.TELEGRAM_LIVE_CHAT_MAX_REPLIES || 10);
+  const scanWindowMinutes = Number(process.env.TELEGRAM_LIVE_CHAT_SCAN_WINDOW_MINUTES || 30);
+  const cutoff = new Date(Date.now() - (Number.isFinite(scanWindowMinutes) ? scanWindowMinutes : 30) * 60 * 1000);
+  const enabledAt = config.enabledAt ? new Date(config.enabledAt) : null;
+  const minDate = enabledAt && enabledAt > cutoff ? enabledAt : cutoff;
 
   return withAdminClient(async (client) => {
     const dialogs = await client.getDialogs({ limit: Number(process.env.TELEGRAM_LIVE_CHAT_DIALOG_LIMIT || 120) });
     let scanned = 0;
     let replied = 0;
     let skipped = 0;
+    let stale = 0;
     const answeredMessages = { ...(memory.answeredMessages || {}) };
 
     for (const dialog of dialogs) {
       if (replied >= (Number.isFinite(maxReplies) ? maxReplies : 10)) break;
       const entity = dialog.entity;
-      if (!isPrivateUserEntity(entity) || Number(dialog.unreadCount || 0) <= 0) continue;
+      if (!isPrivateUserEntity(entity)) continue;
       scanned += 1;
 
       const iterator = client.iterMessages(entity, { limit: 5 });
       for await (const message of iterator) {
         const text = clean(message.message, "");
         if (!text || message.out) continue;
+        const messageDate = message.date instanceof Date ? message.date : new Date(message.date);
+        if (messageDate < minDate) {
+          stale += 1;
+          break;
+        }
         const messageId = Number(message.id);
         const key = String(entity.id?.value ?? entity.id ?? getEntityDisplayName(entity));
         if (answered.has(messageId) || Number(answeredMessages[key]) === messageId) {
@@ -857,12 +869,28 @@ async function runLiveChatAutomation(token) {
       ...memory,
       enabled: true,
       automationLastRunAt: new Date().toISOString(),
-      automation: { scanned, replied, skipped },
+      automation: { scanned, replied, skipped, stale },
       answeredMessages,
     };
     await saveLiveChatMemory(token, nextMemory);
-    return { ok: true, enabled: true, scanned, replied, skipped };
+    return { ok: true, enabled: true, scanned, replied, skipped, stale, scanWindowMinutes: Number.isFinite(scanWindowMinutes) ? scanWindowMinutes : 30 };
   });
+}
+
+function buildLiveChatRunMessage(result) {
+  if (!result?.enabled) {
+    return "💬 Jonli suhbat o'chirilgan.";
+  }
+
+  return [
+    "<b>💬 Jonli suhbat ishga tushdi</b>",
+    "",
+    `Tekshirilgan chatlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
+    `Yuborilgan javoblar: <b>${escapeHtml(result.replied ?? 0)}</b>`,
+    `Oldin javob berilgan: <b>${escapeHtml(result.skipped ?? 0)}</b>`,
+    `Eski xabarlar: <b>${escapeHtml(result.stale ?? 0)}</b>`,
+    `Scan oynasi: <b>${escapeHtml(result.scanWindowMinutes ?? 30)} daqiqa</b>`,
+  ].join("\n");
 }
 
 function buildLiveChatMenuMessage(config) {
@@ -926,9 +954,36 @@ async function sendLiveChatStats(token, chatId) {
 
 async function toggleLiveChat(token, chatId) {
   const current = await getLiveChatConfig();
-  const next = normalizeLiveChatConfig({ ...current, enabled: !current.enabled });
+  const nextEnabled = !current.enabled;
+  const next = normalizeLiveChatConfig({
+    ...current,
+    enabled: nextEnabled,
+    enabledAt: nextEnabled ? new Date().toISOString() : current.enabledAt,
+    disabledAt: nextEnabled ? "" : new Date().toISOString(),
+  });
   await saveLiveChatConfig(token, next);
-  await sendBotMessage(token, chatId, buildLiveChatMenuMessage(next), {
+
+  if (next.enabled) {
+    await sendBotMessage(token, chatId, "💬 Jonli suhbat real vaqtga yaqin rejimda ishga tushdi. Hozir chatlar tekshirilyapti...", {
+      reply_markup: buildLiveChatKeyboard(next),
+    });
+    try {
+      const result = await runLiveChatAutomation(token);
+      await sendBotMessage(token, chatId, buildLiveChatRunMessage(result), {
+        reply_markup: buildLiveChatKeyboard(next),
+      });
+    } catch (error) {
+      await sendBotMessage(
+        token,
+        chatId,
+        `Jonli suhbat ishga tushdi, lekin birinchi scan xato berdi: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+        { reply_markup: buildLiveChatKeyboard(next) }
+      );
+    }
+    return;
+  }
+
+  await sendBotMessage(token, chatId, "⏸ Jonli suhbat to'xtatildi. Endi bot profil chatlariga avtomatik javob yubormaydi, faqat statistika/tahlilni qo'lda ko'rishingiz mumkin.", {
     reply_markup: buildLiveChatKeyboard(next),
   });
 }
