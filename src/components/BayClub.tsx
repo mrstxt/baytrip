@@ -205,7 +205,7 @@ export default function BayClub() {
   useEffect(() => {
     let alive = true;
 
-    fetch("/api/bayclub-config")
+    fetch(`/api/bayclub-config?t=${Date.now()}`, { cache: "no-store" })
       .then((response) => response.json())
       .then((data: { ok?: boolean; plans?: Record<string, PlanOverride> }) => {
         if (alive && data?.plans) setPlanOverrides(data.plans);

@@ -2,6 +2,7 @@ import { Api } from "telegram";
 
 const PRICE_CONFIG_MARKER = "BAYCLUB_PRICE_CONFIG";
 const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
+const DEFAULT_STORAGE_CHAT_TITLE = "DATA \\ BAYTRIP";
 
 function clean(value, fallback = "") {
   const text = String(value ?? "").trim();
@@ -20,8 +21,19 @@ function uniqueValues(values) {
   return values.filter((value, index) => value && values.indexOf(value) === index);
 }
 
+function normalizeTitle(value) {
+  return clean(value).toLowerCase().replace(/\s+/g, " ");
+}
+
 function getStorageChatIds() {
   return uniqueValues([getStorageChatId(), clean(process.env.TELEGRAM_CHAT_ID)]);
+}
+
+function getStorageChatTitles() {
+  return uniqueValues([
+    clean(process.env.TELEGRAM_STORAGE_CHAT_TITLE),
+    DEFAULT_STORAGE_CHAT_TITLE,
+  ].map(normalizeTitle));
 }
 
 function getStorageReadTargets(topicIds = []) {
@@ -56,6 +68,34 @@ function getTelegramEntityInput(chatId) {
     return new Api.PeerChat({ chatId: BigInt(value.slice(1)) });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
+}
+
+async function getReadableEntities(client, chatId) {
+  const entities = [];
+
+  try {
+    entities.push(await client.getEntity(getTelegramEntityInput(chatId)));
+  } catch {
+    // Dialog title fallback quyida sinab ko'riladi.
+  }
+
+  const wantedTitles = getStorageChatTitles();
+  if (wantedTitles.length > 0) {
+    try {
+      const dialogs = await client.getDialogs({ limit: 200 });
+      for (const dialog of dialogs) {
+        const entity = dialog.entity;
+        const title = normalizeTitle(entity?.title || dialog.title);
+        if (title && wantedTitles.includes(title) && !entities.some((item) => String(item?.id) === String(entity?.id))) {
+          entities.push(entity);
+        }
+      }
+    } catch {
+      // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
+    }
+  }
+
+  return entities;
 }
 
 function getAdminProfileConfig() {
@@ -145,6 +185,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "Faqat GET so'rov qabul qilinadi." });
   }
 
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+
   try {
     const plans = await withAdminClient(async (client) => {
       const configs = [];
@@ -153,18 +195,20 @@ export default async function handler(req, res) {
 
       for (const target of getStorageReadTargets(topicIds)) {
         try {
-          const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
-          for (const topicId of target.topicIds) {
-            const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
+          const entities = await getReadableEntities(client, target.chatId);
+          for (const entity of entities) {
+            for (const topicId of target.topicIds) {
+              const iterator = client.iterMessages(entity, buildMessageSearchOptions(300, topicId));
 
-            for await (const message of iterator) {
-              const parsed = parseConfigMessage(message.message);
-              if (!parsed) continue;
+              for await (const message of iterator) {
+                const parsed = parseConfigMessage(message.message);
+                if (!parsed) continue;
 
-              configs.unshift(parsed);
-              const merged = mergePriceConfigs(configs);
-              if ([...wantedPlans].every((plan) => merged[plan])) {
-                return merged;
+                configs.unshift(parsed);
+                const merged = mergePriceConfigs(configs);
+                if ([...wantedPlans].every((plan) => merged[plan])) {
+                  return merged;
+                }
               }
             }
           }
