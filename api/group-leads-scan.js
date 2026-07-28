@@ -1,3 +1,5 @@
+import { Api } from "telegram";
+
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
@@ -433,6 +435,9 @@ function normalizeGroupIdInput(groupId) {
 
 function getEntityInput(groupId) {
   const value = normalizeGroupIdInput(groupId);
+  if (/^-100\d{6,}$/.test(value)) {
+    return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
+  }
   return /^-?\d+$/.test(value) ? Number(value) : value;
 }
 
