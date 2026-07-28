@@ -138,7 +138,7 @@ function isEnabledEnv(value) {
 }
 
 function isThreadStorageEnabled() {
-  return isEnabledEnv(process.env.TELEGRAM_USE_TOPIC_STORAGE || process.env.TELEGRAM_GROUP_LEADS_USE_TOPICS);
+  return false;
 }
 
 function parseTopicId(...values) {
@@ -155,9 +155,7 @@ function uniqueValues(values) {
 
 function getStorageChatId() {
   return clean(
-    process.env.TELEGRAM_INTERNAL_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_SETTINGS_CHAT_ID ||
     DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID,
     ""
@@ -199,6 +197,10 @@ function getTopicSearchIds(...values) {
 
 function buildMessageSearchOptions(limit, topicId) {
   return topicId ? { limit, replyTo: topicId } : { limit };
+}
+
+function getStorageMessageOptions() {
+  return {};
 }
 
 function encodeMarkerPayload(payload) {
@@ -612,7 +614,6 @@ function parseBayClubPriceText(text) {
 }
 
 function getBayClubConfigTopicId() {
-  if (!isThreadStorageEnabled()) return undefined;
   return parseTopicId(process.env.TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID, process.env.TELEGRAM_BAYCLUB_TOPIC_ID);
 }
 
@@ -663,17 +664,15 @@ async function saveBayClubPriceConfig(token, config) {
   const chatId = getStorageChatId();
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
 
-  const threadId = getBayClubConfigTopicId();
   await sendBotMessage(
     token,
     chatId,
     buildMarkerText(PRICE_CONFIG_MARKER, config),
-    threadId ? { message_thread_id: threadId } : {}
+    getStorageMessageOptions()
   );
 }
 
 function getGroupLeadsConfigTopicId() {
-  if (!isThreadStorageEnabled()) return undefined;
   return parseTopicId(
     process.env.TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID,
     process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID,
@@ -898,7 +897,6 @@ function buildCanceledLeadEditedText(originalText, employeeName) {
 
 async function saveLeadFeedback(token, leadData, status, callback, extra = {}) {
   const chatId = getStorageChatId();
-  const topicId = getGroupLeadsConfigTopicId();
   if (!chatId) return;
 
   const feedback = {
@@ -923,7 +921,7 @@ async function saveLeadFeedback(token, leadData, status, callback, extra = {}) {
     "<b>🧠 Guruh lid xotirasi yangilandi</b>"
   );
 
-  await sendBotMessage(token, chatId, text, topicId ? { message_thread_id: topicId } : {});
+  await sendBotMessage(token, chatId, text, getStorageMessageOptions());
 }
 
 function titleCaseUz(value) {
@@ -1653,12 +1651,11 @@ async function saveGroupLeadsConfig(token, config) {
   const chatId = getStorageChatId();
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
 
-  const threadId = getGroupLeadsConfigTopicId();
   await sendBotMessage(
     token,
     chatId,
     buildMarkerText(GROUP_LEADS_CONFIG_MARKER, config),
-    threadId ? { message_thread_id: threadId } : {}
+    getStorageMessageOptions()
   );
 }
 

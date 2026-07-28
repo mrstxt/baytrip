@@ -1,6 +1,6 @@
 # Baytrip
 
-Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari, ichki va tashqi turlar, smart tur tavsiyasi, bron qilish formasi, murojaat formasi, aksiyalar obunasi va BayClub Card bo'limi bor. Arizalar Vercel serverless endpoint orqali Telegram guruhidagi topiclarga yuboriladi. Guruhdan topilgan lidlar ham avvalgidek `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tushadi; faqat botning ichki storage/config/xotira xabarlari alohida yopiq storage guruhga yozilishi mumkin.
+Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari, ichki va tashqi turlar, smart tur tavsiyasi, bron qilish formasi, murojaat formasi, aksiyalar obunasi va BayClub Card bo'limi bor. Arizalar Vercel serverless endpoint orqali Telegram guruhidagi topiclarga yuboriladi. Guruhdan topilgan lidlar ham avvalgidek `TELEGRAM_GROUP_LEADS_TOPIC_ID` topiciga tushadi; botning ichki storage/config/xotira xabarlari esa topicga emas, alohida yopiq storage guruhga yoziladi.
 
 ## Asosiy imkoniyatlar
 
@@ -106,21 +106,24 @@ TELEGRAM_API_HASH=abcdef123456...
 TELEGRAM_ADMIN_SESSION=1AQA...
 ```
 
-BayClub va guruh lid configlari endi default holatda topicga emas, bitta storage guruhga yoziladi. Alohida yopiq storage guruh ishlatish tavsiya qilinadi:
+BayClub narx configlari, guruh lid sozlamalari, scan state va lead feedback xotirasi topicga yozilmaydi. Bu maxfiy storage xabarlar alohida yopiq storage guruhga ketadi:
 
-Kodda default storage chat ID sifatida `-5025743465` ham fallback qilib qo'yilgan, lekin Vercelda env sifatida ham qo'yish tavsiya qilinadi.
+Kodda default storage chat ID sifatida `-5025743465` fallback qilib qo'yilgan, lekin Vercelda env sifatida ham qo'yish tavsiya qilinadi.
 
 ```env
 TELEGRAM_STORAGE_CHAT_ID=-5025743465
-# yoki TELEGRAM_INTERNAL_CHAT_ID=-5025743465
 ```
 
-Eski topic-based saqlash kerak bo'lsa, faqat shunda yoqing:
+Vercelda quyidagi eski topic-storage envlar bo'lsa olib tashlang yoki bo'sh qoldiring. Kod yangi storage yozuvlarda ulardan foydalanmaydi, lekin chalkashmaslik uchun production envda turmagani yaxshi:
 
 ```env
-TELEGRAM_USE_TOPIC_STORAGE=true
-TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID=8
-TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=8
+TELEGRAM_USE_TOPIC_STORAGE
+TELEGRAM_GROUP_LEADS_USE_TOPICS
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID
+TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID
+TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID
+TELEGRAM_INTERNAL_CHAT_ID
+TELEGRAM_SETTINGS_CHAT_ID
 ```
 
 Qo'shimcha sozlamalar:
@@ -281,9 +284,9 @@ Admin panelda `BayClub narxlarini o'zgartirish` tugmasini bosing. Bot reply prom
 
 Birinchi qiymat - hozirgi narx, ikkinchi qiymat - eski chizilgan narx.
 
-Narx config `BAYCLUB_PRICE_CONFIG` marker bilan storage guruhga yopiqroq ko'rinishda yoziladi. Sayt `GET /api/bayclub-config` orqali oxirgi configlarni o'qib narxlarni yangilaydi.
+Narx config `BAYCLUB_PRICE_CONFIG` marker bilan `TELEGRAM_STORAGE_CHAT_ID` guruhiga, topic ishlatmasdan, yopiqroq ko'rinishda yoziladi. Sayt `GET /api/bayclub-config` orqali oxirgi configlarni o'qib narxlarni yangilaydi.
 
-Muhim: texnik config xabarlar asosiy arizalar orasida ko'rinmasligi uchun alohida yopiq storage guruh ochib, `TELEGRAM_STORAGE_CHAT_ID` yoki `TELEGRAM_INTERNAL_CHAT_ID` ga shu guruh ID sini yozing.
+Muhim: texnik config xabarlar asosiy arizalar orasida ko'rinmasligi uchun `TELEGRAM_STORAGE_CHAT_ID=-5025743465` qo'yilgan bo'lishi kerak.
 
 ## Aksiyalar broadcast
 
@@ -358,15 +361,17 @@ TELEGRAM_GROUP_LEADS_TOPIC_ID=<Guruh lidlari topic ID>
 Config, scan state va lid xotirasi yoziladigan storage guruh:
 
 ```env
-# Ixtiyoriy. Berilmasa TELEGRAM_CHAT_ID ishlatiladi.
 TELEGRAM_STORAGE_CHAT_ID=-5025743465
 ```
 
-Storage ham eski topic ichiga yozilsin desangiz:
+Quyidagi eski topic-storage envlarni productiondan olib tashlang. Maxfiy data sozlanmalar topiciga tushmasligi uchun storage yozuvlari endi topicga `message_thread_id` yubormaydi:
 
 ```env
-TELEGRAM_GROUP_LEADS_USE_TOPICS=true
-TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID=<Sozlamalar topic ID>
+TELEGRAM_USE_TOPIC_STORAGE
+TELEGRAM_GROUP_LEADS_USE_TOPICS
+TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID
+TELEGRAM_GROUP_LEADS_CONFIG_TOPIC_ID
+TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID
 ```
 
 Vercel cron endpoint:
@@ -426,7 +431,7 @@ Admin paneldagi `Oxirgi amallar` tugmasi quyidagilarni ko'rsatadi:
 - Guruh lid sozlamalari.
 - Guruh lid scan state yozuvlari.
 
-Bu bo'lim Telegram storage guruhini va eski config topiclarni admin profil session orqali o'qiydi.
+Bu bo'lim Telegram storage guruhini o'qiydi. Eski config topiclarda qolgan marker xabarlar migratsiya uchun fallback sifatida o'qilishi mumkin, lekin yangi yozuvlar faqat storage guruhga ketadi.
 
 ## Statistika
 
@@ -501,7 +506,8 @@ Murojaatlar topicga tushmasa:
 
 BayClub narxlari defaultga qaytsa:
 
-- `TELEGRAM_STORAGE_CHAT_ID` yoki eski topic ishlatsangiz `TELEGRAM_BAYCLUB_CONFIG_TOPIC_ID` to'g'ri ulanganini tekshiring.
+- `TELEGRAM_STORAGE_CHAT_ID=-5025743465` Vercel envda borligini tekshiring.
+- Bot `-5025743465` storage guruhida admin yoki xabar yubora oladigan a'zo ekanini tekshiring.
 - Bot orqali narxlarni bir marta to'liq yuboring:
 
 ```text

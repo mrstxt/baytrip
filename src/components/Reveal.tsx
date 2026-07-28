@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { createElement, useEffect, useRef, type ReactNode } from "react";
 import { cn } from "../utils/cn";
 
 export default function Reveal({
@@ -32,10 +32,13 @@ export default function Reveal({
     return () => io.disconnect();
   }, []);
 
-  return (
-    // @ts-expect-error dynamic tag ref
-    <Tag ref={ref} className={cn("reveal", className)} style={{ transitionDelay: `${delay}ms` }}>
-      {children}
-    </Tag>
+  return createElement(
+    Tag,
+    {
+      ref,
+      className: cn("reveal", className),
+      style: { transitionDelay: `${delay}ms` },
+    },
+    children
   );
 }

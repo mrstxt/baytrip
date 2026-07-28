@@ -8,9 +8,7 @@ function clean(value, fallback = "") {
 
 function getStorageChatId() {
   return clean(
-    process.env.TELEGRAM_INTERNAL_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_SETTINGS_CHAT_ID ||
     DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID
   );

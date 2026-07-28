@@ -128,15 +128,12 @@ function isEnabledEnv(value) {
 }
 
 function shouldUseGroupLeadTopics() {
-  return isEnabledEnv(process.env.TELEGRAM_GROUP_LEADS_USE_TOPICS || process.env.TELEGRAM_USE_TOPIC_STORAGE);
+  return false;
 }
 
 function getStorageChatId() {
   return clean(
-    process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_INTERNAL_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_SETTINGS_CHAT_ID ||
     DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID
   );
@@ -615,12 +612,11 @@ async function readRecentFeedback(client) {
 
 async function saveState(token, state, scanResult = null) {
   const chatId = getStorageChatId();
-  const topicId = getConfigTopicId();
   const text = scanResult
     ? [buildScanSummaryText(scanResult), "", buildMarkerText(GROUP_LEADS_STATE_MARKER, state)].join("\n")
     : buildMarkerText(GROUP_LEADS_STATE_MARKER, state);
 
-  await sendBotMessage(token, chatId, text, topicId ? { message_thread_id: topicId } : {});
+  await sendBotMessage(token, chatId, text);
 }
 
 function isAuthorized(req) {
