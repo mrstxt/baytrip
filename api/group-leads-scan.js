@@ -319,7 +319,7 @@ async function readLatestMarker(client, marker) {
   const topicIds = getConfigTopicIds();
 
   for (const target of getStorageReadTargets(topicIds)) {
-    const entity = await client.getEntity(target.chatId);
+    const entity = await client.getEntity(getEntityInput(target.chatId));
     for (const topicId of target.topicIds) {
       const iterator = client.iterMessages(
         entity,
@@ -437,6 +437,16 @@ function getEntityInput(groupId) {
   const value = normalizeGroupIdInput(groupId);
   if (/^-100\d{6,}$/.test(value)) {
     return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
+  }
+  if (/^100\d{6,}$/.test(value)) {
+    return new Api.PeerChannel({ channelId: BigInt(value.slice(3)) });
+  }
+  if (/^-\d+$/.test(value)) {
+    const id = BigInt(value.slice(1));
+    if (id > 2147483647n) {
+      return new Api.PeerChannel({ channelId: id });
+    }
+    return new Api.PeerChat({ chatId: id });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
 }
@@ -598,7 +608,7 @@ async function readRecentFeedback(client) {
   const feedback = [];
 
   for (const target of getStorageReadTargets(topicIds)) {
-    const entity = await client.getEntity(target.chatId);
+    const entity = await client.getEntity(getEntityInput(target.chatId));
     for (const topicId of target.topicIds) {
       const iterator = client.iterMessages(
         entity,

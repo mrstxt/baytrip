@@ -71,8 +71,15 @@ function getTelegramEntityInput(chatId) {
   if (/^-100\d{6,}$/.test(value)) {
     return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
   }
+  if (/^100\d{6,}$/.test(value)) {
+    return new Api.PeerChannel({ channelId: BigInt(value.slice(3)) });
+  }
   if (/^-\d+$/.test(value)) {
-    return new Api.PeerChat({ chatId: BigInt(value.slice(1)) });
+    const id = BigInt(value.slice(1));
+    if (id > 2147483647n) {
+      return new Api.PeerChannel({ channelId: id });
+    }
+    return new Api.PeerChat({ chatId: id });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
 }

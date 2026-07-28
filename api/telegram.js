@@ -210,8 +210,15 @@ function getTelegramEntityInput(chatId) {
   if (/^-100\d{6,}$/.test(value)) {
     return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
   }
+  if (/^100\d{6,}$/.test(value)) {
+    return new Api.PeerChannel({ channelId: BigInt(value.slice(3)) });
+  }
   if (/^-\d+$/.test(value)) {
-    return new Api.PeerChat({ chatId: BigInt(value.slice(1)) });
+    const id = BigInt(value.slice(1));
+    if (id > 2147483647n) {
+      return new Api.PeerChannel({ channelId: id });
+    }
+    return new Api.PeerChat({ chatId: id });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
 }
@@ -1121,7 +1128,7 @@ async function getRecentAdminActions() {
     ];
 
     for (const target of getStorageReadTargets(topicIds)) {
-      const entity = await client.getEntity(target.chatId);
+      const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
       for (const topicId of target.topicIds) {
         const iterator = client.iterMessages(
           entity,
@@ -1228,7 +1235,7 @@ async function getLeadStats() {
     .filter((value, index, values) => value === undefined || (Number.isFinite(value) && values.indexOf(value) === index));
 
   return withAdminClient(async (client) => {
-    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const entity = await client.getEntity(getTelegramEntityInput(process.env.TELEGRAM_CHAT_ID));
     const todayStart = getTodayStartTashkent();
     const scanLimit = Number(process.env.TELEGRAM_LEAD_STATS_SCAN_LIMIT || 300);
     const employeesToday = new Map();
@@ -1376,7 +1383,7 @@ async function cleanupBotMessages(token) {
   const limit = Number.isFinite(scanLimit) && scanLimit > 0 ? scanLimit : 200;
 
   return withAdminClient(async (client) => {
-    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const entity = await client.getEntity(getTelegramEntityInput(process.env.TELEGRAM_CHAT_ID));
     const results = [];
     let totalChecked = 0;
     let totalDeleted = 0;
@@ -1663,7 +1670,7 @@ async function getLatestGroupLeadsConfig() {
 
       for (const target of getStorageReadTargets(topicIds)) {
         try {
-          const entity = await client.getEntity(target.chatId);
+          const entity = await client.getEntity(getTelegramEntityInput(target.chatId));
           for (const topicId of target.topicIds) {
             const iterator = client.iterMessages(entity, buildMessageSearchOptions(150, topicId));
 
@@ -1912,7 +1919,7 @@ async function getPromoSubscribersFromTopic() {
   const limit = Number(process.env.TELEGRAM_PROMO_SCAN_LIMIT || 500);
   return withAdminClient(async (client) => {
     const usernames = new Set();
-    const entity = await client.getEntity(clean(process.env.TELEGRAM_CHAT_ID));
+    const entity = await client.getEntity(getTelegramEntityInput(process.env.TELEGRAM_CHAT_ID));
     const iterator = client.iterMessages(entity, {
       limit: Number.isFinite(limit) ? limit : 500,
       replyTo: topicId,
