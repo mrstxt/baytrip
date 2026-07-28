@@ -36,6 +36,13 @@ function getStorageChatTitles() {
   ].map(normalizeTitle));
 }
 
+function isStorageTitleMatch(title) {
+  const normalized = normalizeTitle(title);
+  if (!normalized) return false;
+  const wantedTitles = getStorageChatTitles();
+  return wantedTitles.includes(normalized) || (normalized.includes("data") && normalized.includes("baytrip"));
+}
+
 function getStorageReadTargets(topicIds = []) {
   const storageChatId = getStorageChatId();
   const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
@@ -79,20 +86,16 @@ async function getReadableEntities(client, chatId) {
     // Dialog title fallback quyida sinab ko'riladi.
   }
 
-  const wantedTitles = getStorageChatTitles();
-  if (wantedTitles.length > 0) {
-    try {
-      const dialogs = await client.getDialogs({ limit: 200 });
-      for (const dialog of dialogs) {
-        const entity = dialog.entity;
-        const title = normalizeTitle(entity?.title || dialog.title);
-        if (title && wantedTitles.includes(title) && !entities.some((item) => String(item?.id) === String(entity?.id))) {
-          entities.push(entity);
-        }
+  try {
+    const dialogs = await client.getDialogs({ limit: 500 });
+    for (const dialog of dialogs) {
+      const entity = dialog.entity;
+      if (isStorageTitleMatch(entity?.title || dialog.title) && !entities.some((item) => String(item?.id) === String(entity?.id))) {
+        entities.push(entity);
       }
-    } catch {
-      // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
     }
+  } catch {
+    // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
   }
 
   return entities;
