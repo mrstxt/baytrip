@@ -59,6 +59,10 @@ const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 const DEFAULT_STORAGE_CHAT_TITLE = "DATA \\ BAYTRIP";
 
 let groupLeadEmployeesCache = null;
+let serviceChatStateLoadPromise = null;
+let serviceChatFlushTimer = null;
+let serviceChatFlushPromise = null;
+const pendingServiceChatMessages = new Map();
 const pendingAdminLogins = new Map();
 
 function escapeHtml(value) {
@@ -345,7 +349,7 @@ async function sendBotMessage(token, chatId, text, extra = {}) {
     });
   }
   if (data?.ok && isPrivateServiceChat(chatId, { ...telegramExtra, __skipServiceLog })) {
-    await appendServiceChatMessages(token, chatId, [data.result?.message_id]).catch((error) => {
+    appendServiceChatMessages(token, chatId, [data.result?.message_id]).catch((error) => {
       console.error("service chat message log failed", {
         chatId,
         error: error instanceof Error ? error.message : error,
@@ -1156,51 +1160,109 @@ function normalizeServiceChatState(state) {
 }
 
 async function getServiceChatState() {
+  if (serviceChatStateLoadPromise) {
+    return normalizeServiceChatState(await serviceChatStateLoadPromise);
+  }
+
   try {
-    return await withAdminClient(async (client) => normalizeServiceChatState(
+    serviceChatStateLoadPromise = withAdminClient(async (client) => normalizeServiceChatState(
       await readLatestStorageMarker(client, SERVICE_CHAT_STATE_MARKER, 80)
     ));
+    return normalizeServiceChatState(await serviceChatStateLoadPromise);
   } catch {
     return normalizeServiceChatState(null);
+  } finally {
+    serviceChatStateLoadPromise = null;
   }
 }
 
 async function saveServiceChatState(token, state) {
   const chatId = getStorageChatId();
   if (!chatId) return;
+  const normalizedState = normalizeServiceChatState({
+    ...state,
+    updatedAt: new Date().toISOString(),
+  });
   await sendBotMessage(
     token,
     chatId,
-    buildMarkerText(SERVICE_CHAT_STATE_MARKER, normalizeServiceChatState({
-      ...state,
-      updatedAt: new Date().toISOString(),
-    })),
+    buildMarkerText(SERVICE_CHAT_STATE_MARKER, normalizedState),
     { ...getStorageMessageOptions(), __skipServiceLog: true }
   );
+}
+
+function queueServiceChatMessages(chatId, ids) {
+  const key = normalizeTelegramChatId(chatId);
+  const current = pendingServiceChatMessages.get(key) || [];
+  const day = getTodayKey();
+  pendingServiceChatMessages.set(key, [
+    ...current,
+    ...ids.map((id) => ({ id, day, at: new Date().toISOString() })),
+  ].slice(-250));
+}
+
+function drainPendingServiceChatMessages() {
+  const entries = [...pendingServiceChatMessages.entries()];
+  pendingServiceChatMessages.clear();
+  return entries;
+}
+
+function mergeServiceChatMessages(state, pendingEntries) {
+  const nextState = normalizeServiceChatState(state);
+  for (const [key, items] of pendingEntries) {
+    const current = nextState.chats[key] || { messages: [] };
+    const existing = new Set((current.messages || []).map((item) => Number(item.id)));
+    const messages = [
+      ...(current.messages || []),
+      ...items.filter((item) => !existing.has(Number(item.id))),
+    ].slice(-250);
+    nextState.chats[key] = {
+      ...current,
+      updatedAt: new Date().toISOString(),
+      messages,
+    };
+  }
+  return nextState;
+}
+
+function scheduleServiceChatStateFlush(token) {
+  if (serviceChatFlushTimer) clearTimeout(serviceChatFlushTimer);
+  serviceChatFlushTimer = setTimeout(() => {
+    serviceChatFlushTimer = null;
+    serviceChatFlushPromise = flushServiceChatState(token).catch((error) => {
+      console.error("service chat state flush failed", {
+        error: error instanceof Error ? error.message : error,
+      });
+    }).finally(() => {
+      serviceChatFlushPromise = null;
+    });
+  }, 1000);
+}
+
+async function flushServiceChatState(token) {
+  if (serviceChatFlushTimer) {
+    clearTimeout(serviceChatFlushTimer);
+    serviceChatFlushTimer = null;
+  }
+  if (serviceChatFlushPromise) {
+    await serviceChatFlushPromise;
+    serviceChatFlushPromise = null;
+    return;
+  }
+
+  const pendingEntries = drainPendingServiceChatMessages();
+  if (!pendingEntries.length) return;
+
+  const state = await getServiceChatState();
+  await saveServiceChatState(token, mergeServiceChatMessages(state, pendingEntries));
 }
 
 async function appendServiceChatMessages(token, chatId, messageIds = []) {
   const ids = [...new Set(messageIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
   if (!ids.length || !isPrivateServiceChat(chatId)) return;
 
-  const state = await getServiceChatState();
-  const key = normalizeTelegramChatId(chatId);
-  const current = state.chats[key] || { messages: [] };
-  const day = getTodayKey();
-  const existing = new Set((current.messages || []).map((item) => Number(item.id)));
-  const nextMessages = [
-    ...(current.messages || []),
-    ...ids
-      .filter((id) => !existing.has(id))
-      .map((id) => ({ id, day, at: new Date().toISOString() })),
-  ].slice(-250);
-
-  state.chats[key] = {
-    ...current,
-    updatedAt: new Date().toISOString(),
-    messages: nextMessages,
-  };
-  await saveServiceChatState(token, state);
+  queueServiceChatMessages(chatId, ids);
+  scheduleServiceChatStateFlush(token);
 }
 
 function getCallbackUserName(callback) {
@@ -1913,6 +1975,7 @@ function shouldDeleteServiceMessage(item, mode) {
 
 async function cleanupServiceChatMessages(token, chatId = null, options = {}) {
   const mode = options.mode || "old";
+  await flushServiceChatState(token);
   const state = await getServiceChatState();
   const targetChatIds = chatId ? [normalizeTelegramChatId(chatId)] : Object.keys(state.chats || {});
   let deleted = 0;
@@ -2719,7 +2782,7 @@ async function handleBotUpdate(body, token, context = {}) {
   }
 
   if (message.message_id && isAllowedAdmin(message) && isPrivateServiceChat(chatId)) {
-    await appendServiceChatMessages(token, chatId, [message.message_id]).catch((error) => {
+    appendServiceChatMessages(token, chatId, [message.message_id]).catch((error) => {
       console.error("service chat incoming message log failed", {
         chatId,
         error: error instanceof Error ? error.message : error,
@@ -2883,6 +2946,8 @@ async function handleBotUpdate(body, token, context = {}) {
     } else if (text === BUTTON_RECENT_ACTIONS) {
       await sendRecentAdminActions(token, chatId);
     } else if (text === BUTTON_CLEANUP) {
+      await appendServiceChatMessages(token, chatId, [message.message_id]);
+      await flushServiceChatState(token);
       await runBotMessageCleanup(token, chatId);
     } else if (text === BUTTON_LOGOUT) {
       await sendBotMessage(token, chatId, "Panel yopildi. Qayta kirish: <code>/login</code>", {
