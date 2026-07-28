@@ -69,14 +69,14 @@ function buildMessageSearchOptions(limit, topicId) {
 function getTelegramEntityInput(chatId) {
   const value = clean(chatId);
   if (/^-100\d{6,}$/.test(value)) {
-    return new Api.PeerChannel({ channelId: BigInt(value.slice(4)) });
+    return new Api.PeerChannel({ channelId: Number(value.slice(4)) });
   }
   if (/^100\d{6,}$/.test(value)) {
-    return new Api.PeerChannel({ channelId: BigInt(value.slice(3)) });
+    return new Api.PeerChannel({ channelId: Number(value.slice(3)) });
   }
   if (/^-\d+$/.test(value)) {
-    const id = BigInt(value.slice(1));
-    if (id > 2147483647n) {
+    const id = Number(value.slice(1));
+    if (id > 2147483647) {
       return new Api.PeerChannel({ channelId: id });
     }
     return new Api.PeerChat({ chatId: id });
