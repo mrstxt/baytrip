@@ -75,11 +75,7 @@ function getTelegramEntityInput(chatId) {
     return new Api.PeerChannel({ channelId: Number(value.slice(3)) });
   }
   if (/^-\d+$/.test(value)) {
-    const id = Number(value.slice(1));
-    if (id > 2147483647) {
-      return new Api.PeerChannel({ channelId: id });
-    }
-    return new Api.PeerChat({ chatId: id });
+    return new Api.PeerChat({ chatId: Number(value.slice(1)) });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
 }
