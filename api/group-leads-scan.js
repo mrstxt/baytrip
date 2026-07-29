@@ -3,6 +3,7 @@ import { Api } from "telegram";
 const GROUP_LEADS_CONFIG_MARKER = "GROUP_LEADS_CONFIG";
 const GROUP_LEADS_STATE_MARKER = "GROUP_LEADS_STATE";
 const GROUP_LEAD_FEEDBACK_MARKER = "GROUP_LEAD_FEEDBACK";
+const GROUP_LEAD_DATA_MARKER = "GROUP_LEAD_DATA";
 const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 const DEFAULT_STORAGE_CHAT_TITLE = "DATA \\ BAYTRIP";
 const DEFAULT_GROUP_LEAD_GROUPS = [
@@ -503,6 +504,16 @@ function getSenderLabel(message) {
   return username ? `${name} (@${username})` : name;
 }
 
+function getSenderUsername(message) {
+  return clean(message?.sender?.username, "").replace(/^@+/, "");
+}
+
+function getLeadKey(groupId, messageId) {
+  const group = normalizeGroupIdInput(groupId);
+  const id = Number(messageId);
+  return group && Number.isFinite(id) ? `${group}:${id}` : "";
+}
+
 function getMessageLink(groupId, messageId) {
   const value = normalizeGroupIdInput(groupId);
   if (value.startsWith("@")) return `https://t.me/${value.slice(1)}/${messageId}`;
@@ -580,6 +591,17 @@ function buildLeadText(lead) {
   const { group, message, matchedKeywords, score, reasons } = lead;
   const link = getMessageLink(group.id, message.id);
   const sender = getSenderLabel(message);
+  const marker = buildMarkerText(GROUP_LEAD_DATA_MARKER, {
+    source: "group-lead",
+    groupId: normalizeGroupIdInput(group.id),
+    groupTitle: clean(group.title, group.id),
+    messageId: message.id,
+    username: getSenderUsername(message),
+    sender,
+    message: clean(message.message),
+    matchedKeywords,
+    link,
+  });
   const lines = [
     "<b>🔎 Guruhdan yangi lid</b>",
     "",
@@ -595,6 +617,8 @@ function buildLeadText(lead) {
   if (link) {
     lines.push(`🔗 <b>Asl xabar:</b> ${escapeHtml(link)}`);
   }
+
+  lines.push("", marker);
 
   return lines.join("\n");
 }
@@ -626,6 +650,55 @@ function buildScanSummaryText(result) {
     errors.length ? "<b>Xatolar:</b>" : "",
     ...errors.slice(0, 5).map((item) => `${escapeHtml(item.group)}: ${escapeHtml(item.error)}`),
   ].filter(Boolean).join("\n");
+}
+
+function getLeadKeyFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  return getLeadKey(payload.groupId, payload.messageId);
+}
+
+function getLeadKeyFromText(text) {
+  const parsed = parseMarkerJson(text, GROUP_LEAD_DATA_MARKER);
+  const parsedKey = getLeadKeyFromPayload(parsed);
+  if (parsedKey) return parsedKey;
+
+  const link = clean(String(text ?? "").match(/https:\/\/t\.me\/c\/(\d+)\/(\d+)/)?.[0], "");
+  const match = link.match(/https:\/\/t\.me\/c\/(\d+)\/(\d+)/);
+  if (!match) return "";
+  return getLeadKey(`-100${match[1]}`, match[2]);
+}
+
+async function readRecentLeadTopicKeys(client, chatId, topicId) {
+  const keys = new Set();
+  const limit = Number(process.env.TELEGRAM_GROUP_LEADS_DEDUPE_SCAN_LIMIT || 500);
+
+  try {
+    const entity = await client.getEntity(getEntityInput(chatId));
+    const iterator = client.iterMessages(
+      entity,
+      buildMessageSearchOptions(Number.isFinite(limit) ? limit : 500, topicId)
+    );
+
+    for await (const message of iterator) {
+      const text = clean(message.message, "");
+      if (!text) continue;
+
+      const leadKey = getLeadKeyFromText(text);
+      if (leadKey) keys.add(leadKey);
+
+      const feedback = parseMarkerJson(text, GROUP_LEAD_FEEDBACK_MARKER);
+      const feedbackKey = getLeadKeyFromPayload(feedback);
+      if (feedbackKey) keys.add(feedbackKey);
+    }
+  } catch (error) {
+    console.error("group lead topic dedupe read failed", {
+      chatId,
+      topicId,
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+
+  return keys;
 }
 
 function tokenizeLeadText(value) {
@@ -820,6 +893,7 @@ async function scanGroup(client, group, config, state, learningProfile, options 
     if (!message?.id) continue;
     newestId = Math.max(newestId, message.id);
     checked += 1;
+    if (options.skipLeadKeys?.has(getLeadKey(group.id, message.id))) continue;
 
     if (!isWithinScanWindow(message, cutoffDate)) {
       skippedOld += 1;
@@ -873,6 +947,7 @@ export default async function handler(req, res) {
       const learningProfile = buildLearningProfile(feedback);
       const nextState = { ...state };
       const leadTopicId = getLeadTopicId();
+      const skipLeadKeys = await readRecentLeadTopicKeys(client, chatId, leadTopicId);
       let sent = 0;
       let checked = 0;
       let skippedOld = 0;
@@ -887,7 +962,10 @@ export default async function handler(req, res) {
       scanLoop:
       for (const group of groups) {
         try {
-          const scan = await scanGroup(client, group, config, state, learningProfile, scanOptions);
+          const scan = await scanGroup(client, group, config, state, learningProfile, {
+            ...scanOptions,
+            skipLeadKeys,
+          });
           nextState[group.id] = scan.newestId;
           checked += scan.checked || 0;
           skippedOld += scan.skippedOld || 0;
@@ -905,6 +983,7 @@ export default async function handler(req, res) {
               }
             );
             sent += 1;
+            skipLeadKeys.add(getLeadKey(lead.group.id, lead.message.id));
             await wait(Number(process.env.TELEGRAM_GROUP_LEADS_SEND_DELAY_MS || 3500));
           }
         } catch (error) {

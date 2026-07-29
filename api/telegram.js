@@ -28,6 +28,7 @@ const LIVE_CHAT_MEMORY_MARKER = "LIVE_CHAT_MEMORY";
 const GROUP_LEAD_CONFIRM_CALLBACK = "gl_confirm";
 const GROUP_LEAD_CANCEL_CALLBACK = "gl_cancel";
 const GROUP_LEAD_AGENT_CALLBACK_PREFIX = "gl_agent:";
+const GROUP_SCAN_ADD_CALLBACK_PREFIX = "gl_group_add:";
 const BUTTON_PROMO = "📣 Aksiya xabar yuborish";
 const BUTTON_BAYCLUB_PRICES = "💳 BayClub narxlari";
 const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
@@ -60,6 +61,10 @@ const DEFAULT_STORAGE_CHAT_ID = "-5025743465";
 const DEFAULT_STORAGE_CHAT_TITLE = "DATA \\ BAYTRIP";
 
 let groupLeadEmployeesCache = null;
+let profileGroupsCache = {
+  loadedAt: 0,
+  groups: [],
+};
 let serviceChatStateLoadPromise = null;
 let serviceChatFlushTimer = null;
 let serviceChatFlushPromise = null;
@@ -673,6 +678,17 @@ function buildProfileGroupLine(group) {
   return `${group.id}=${group.title}`;
 }
 
+function buildProfileGroupKeyboard(groups, offset = 0) {
+  return {
+    inline_keyboard: groups.map((group, index) => ([
+      {
+        text: `✅ Qo'shish: ${group.title.slice(0, 42)}`,
+        callback_data: `${GROUP_SCAN_ADD_CALLBACK_PREFIX}${offset + index}`,
+      },
+    ])),
+  };
+}
+
 async function getAdminProfileGroups() {
   return withAdminClient(async (client) => {
     const limit = Number(process.env.TELEGRAM_PROFILE_GROUPS_SCAN_LIMIT || 300);
@@ -700,6 +716,10 @@ async function getAdminProfileGroups() {
 async function sendAdminProfileGroupsPrompt(token, chatId) {
   try {
     const groups = await getAdminProfileGroups();
+    profileGroupsCache = {
+      loadedAt: Date.now(),
+      groups,
+    };
     if (!groups.length) {
       await sendBotMessage(
         token,
@@ -721,14 +741,28 @@ async function sendAdminProfileGroupsPrompt(token, chatId) {
       token,
       chatId,
       [
-        GROUP_LEADS_GROUPS_REPLY_MARKER,
+        "<b>📋 Profil guruhlari</b>",
         "",
         `Admin profil guruhlari: ${groups.length} ta.`,
-        `Quyida scannerga qo'shish mumkin bo'lgan birinchi ${visibleGroups.length} ta guruh bor.`,
+        `Quyida birinchi ${visibleGroups.length} ta guruh bor.`,
         "",
-        "Scanner ishlasin degan guruhlarni qoldirib, kerakmaslarini o'chirib, shu xabarga reply yuboring:",
+        "Har bir guruhni scannerga qo'shish uchun yonidagi tugmani bosing.",
+        "Yoki pastdagi ro'yxatni tahrirlab shu xabarga reply qilsangiz, ro'yxat to'liq saqlanadi:",
         "",
         `<code>${escapeHtml(visibleGroups.map(buildProfileGroupLine).join("\n"))}</code>`,
+      ].join("\n"),
+      {
+        reply_markup: buildProfileGroupKeyboard(visibleGroups, 0),
+      }
+    );
+
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        GROUP_LEADS_GROUPS_REPLY_MARKER,
+        "",
+        "Ro'yxatni qo'lda saqlash kerak bo'lsa, yuqoridagi ID=Nomi qatorlarini shu xabarga reply qilib yuboring.",
       ].join("\n"),
       {
         reply_markup: {
@@ -742,6 +776,44 @@ async function sendAdminProfileGroupsPrompt(token, chatId) {
       token,
       chatId,
       `Profil guruhlarini o'qishda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+      { reply_markup: buildGroupLeadsKeyboard() }
+    );
+  }
+}
+
+async function addProfileGroupToScanner(token, chatId, callback, data) {
+  const index = Number(String(data).replace(GROUP_SCAN_ADD_CALLBACK_PREFIX, ""));
+  let groups = Date.now() - profileGroupsCache.loadedAt < 10 * 60 * 1000 ? profileGroupsCache.groups : [];
+  if (!groups.length) {
+    groups = await getAdminProfileGroups();
+    profileGroupsCache = {
+      loadedAt: Date.now(),
+      groups,
+    };
+  }
+  const group = groups[Number.isInteger(index) && index >= 0 ? index : -1];
+  if (!group?.id) {
+    await sendBotMessage(
+      token,
+      chatId,
+      "Guruh ro'yxati eskirgan. Iltimos, <b>📋 Profil guruhlari</b> ni qayta bosing.",
+      { reply_markup: buildGroupLeadsKeyboard() }
+    );
+    return;
+  }
+
+  try {
+    const previousConfig = await getLatestGroupLeadsConfig();
+    const existingGroups = Array.isArray(previousConfig?.groups) ? previousConfig.groups : [];
+    const nextGroups = [...existingGroups.filter((item) => normalizeGroupIdInput(item?.id) !== group.id), group];
+    const nextConfig = normalizeGroupLeadsConfig({ ...previousConfig, groups: nextGroups });
+    await saveGroupLeadsConfig(token, nextConfig);
+    await sendGroupLeadsSavedMessage(token, chatId, nextConfig, `Guruh qo'shildi: ${group.title}`);
+  } catch (error) {
+    await sendBotMessage(
+      token,
+      chatId,
+      `Guruhni qo'shishda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
       { reply_markup: buildGroupLeadsKeyboard() }
     );
   }
@@ -1661,7 +1733,26 @@ async function saveLeadFeedback(token, leadData, status, callback, extra = {}) {
     "<b>🧠 Guruh lid xotirasi yangilandi</b>"
   );
 
-  await sendBotMessage(token, chatId, text, getStorageMessageOptions());
+  try {
+    await sendBotMessage(token, chatId, text, getStorageMessageOptions());
+    return;
+  } catch (error) {
+    console.error("group lead feedback storage save failed", {
+      chatId,
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+
+  const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const groupLeadTopicId = parseTopicId(process.env.TELEGRAM_GROUP_LEADS_TOPIC_ID);
+  if (mainChatId && mainChatId !== chatId) {
+    await sendBotMessage(
+      token,
+      mainChatId,
+      text,
+      groupLeadTopicId ? { message_thread_id: groupLeadTopicId } : {}
+    );
+  }
 }
 
 function titleCaseUz(value) {
@@ -2491,12 +2582,34 @@ async function getLatestGroupLeadsConfig() {
 async function saveGroupLeadsConfig(token, config) {
   const chatId = getStorageChatId();
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID kiritilmagan.");
+  const text = buildMarkerText(GROUP_LEADS_CONFIG_MARKER, config);
+
+  try {
+    await sendBotMessage(
+      token,
+      chatId,
+      text,
+      getStorageMessageOptions()
+    );
+    return;
+  } catch (error) {
+    console.error("group leads config storage save failed", {
+      chatId,
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+
+  const mainChatId = clean(process.env.TELEGRAM_CHAT_ID, "");
+  const groupLeadTopicId = getGroupLeadsConfigTopicId();
+  if (!mainChatId || mainChatId === chatId) {
+    throw new Error("Guruh lid sozlamasini saqlash uchun TELEGRAM_CHAT_ID yoki storage chat ishlashi kerak.");
+  }
 
   await sendBotMessage(
     token,
-    chatId,
-    buildMarkerText(GROUP_LEADS_CONFIG_MARKER, config),
-    getStorageMessageOptions()
+    mainChatId,
+    text,
+    groupLeadTopicId ? { message_thread_id: groupLeadTopicId } : {}
   );
 }
 
@@ -2917,6 +3030,11 @@ async function handleBotUpdate(body, token, context = {}) {
           { inline_keyboard: [] }
         );
       }
+      return { ok: true };
+    }
+
+    if (data.startsWith(GROUP_SCAN_ADD_CALLBACK_PREFIX)) {
+      await addProfileGroupToScanner(token, chatId, callback, data);
       return { ok: true };
     }
 
