@@ -2142,11 +2142,14 @@ function buildLeadScannerResultMessage(result) {
   return [
     "<b>🧭 Lid skaner yakunlandi</b>",
     "",
+    result.manual ? "Rejim: <b>manual scan</b>" : "",
     `Guruhlar: <b>${escapeHtml(result.scanned ?? 0)}</b>`,
     `Tekshirilgan xabarlar: <b>${escapeHtml(result.checked ?? 0)}</b>`,
     `Topicga yuborilgan lidlar: <b>${escapeHtml(result.sent ?? 0)}</b>`,
+    result.skippedOld ? `Eski deb o'tkazilgan: <b>${escapeHtml(result.skippedOld)}</b>` : "",
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
     `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? DEFAULT_GROUP_LEAD_MESSAGE_LIMIT)} xabar</b>`,
+    result.maxSend ? `Yuborish limiti: <b>${escapeHtml(result.maxSend)}</b>` : "",
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
     `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
     result.stateSaved === false ? "Scan state: <b>saqlanmadi</b>" : "",
@@ -2170,14 +2173,14 @@ async function runLeadScannerNow(token, chatId, baseUrl) {
     [
       "<b>🧭 Lid skaner boshlandi</b>",
       "",
-      `Har bir sozlangan guruhdan oxirgi ${DEFAULT_GROUP_LEAD_MESSAGE_LIMIT} ta xabar tekshiriladi.`,
-      "Oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa, belgilangan topicga yuboriladi.",
+      "Har bir sozlangan guruhdan oxirgi 300 ta xabar tekshiriladi.",
+      "Manual scan 24 soat ichidagi kalit so'z, so'rov belgisi yoki tasdiqlangan namunalarga o'xshash lidlarni topicga yuboradi.",
     ].join("\n")
   );
 
   try {
     const secret = getCronSecret();
-    const response = await fetch(`${baseUrl}/api/group-leads-scan`, {
+    const response = await fetch(`${baseUrl}/api/group-leads-scan?manual=true`, {
       method: "GET",
       headers: secret ? { Authorization: `Bearer ${secret}` } : {},
     });

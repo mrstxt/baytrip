@@ -384,6 +384,20 @@ function findMatchedKeywords(message, keywords) {
   return keywords.filter((keyword) => normalized.includes(normalizeText(keyword)));
 }
 
+const LEAD_INTENT_PATTERNS = [
+  { label: "so'rov", pattern: /\b(kimda|kimda bor|bormi|bor mi|kerak|kerak edi|topib|qidir|izlay|xohlay|olamizmi|qila oladi|taklif bormi)\b/i },
+  { label: "narx so'rovi", pattern: /\b(necha pul|qancha|qancha turadi|narx|narxi|price|стоимость|сколько|цена)\b/i },
+  { label: "ruscha so'rov", pattern: /\b(ищу|нужно|нужен|нужна|кто может|есть у кого|у кого есть|подскажите|посоветуйте|варианты|предложите)\b/i },
+  { label: "sayohat mavzusi", pattern: /\b(tur|tour|avia|bilet|chipta|hotel|otel|mehmonxona|viza|visa|transfer|gid|ekskursiya|путевка|тур|авиа|билет|отель|виза|трансфер|гид|экскурсия)\b/i },
+];
+
+function findLeadIntentMatches(message) {
+  const text = normalizeText(message);
+  return LEAD_INTENT_PATTERNS
+    .filter((item) => item.pattern.test(text))
+    .map((item) => item.label);
+}
+
 function getLeadKeywords(config) {
   return [
     ...new Set(
@@ -417,7 +431,11 @@ function getLeadGroups(config) {
   return [...uniqueGroups.values()];
 }
 
-function getScanWindowMinutes(config) {
+function getScanWindowMinutes(config, options = {}) {
+  if (Number.isFinite(options.windowMinutes) && options.windowMinutes > 0) {
+    return options.windowMinutes;
+  }
+
   const parsed = Number(
     process.env.TELEGRAM_GROUP_LEADS_SCAN_WINDOW_MINUTES ||
     config?.scanWindowMinutes ||
@@ -426,7 +444,11 @@ function getScanWindowMinutes(config) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
 }
 
-function getScanMessageLimit() {
+function getScanMessageLimit(options = {}) {
+  if (Number.isFinite(options.messageLimit) && options.messageLimit > 0) {
+    return options.messageLimit;
+  }
+
   const parsed = Number(process.env.TELEGRAM_GROUP_LEADS_SCAN_LIMIT || 100);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
 }
@@ -635,6 +657,7 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
   const approvedHits = [];
   const canceledHits = [];
   const normalizedText = normalizeText(text);
+  const intentMatches = findLeadIntentMatches(text);
   const canceledMatch = learningProfile.canceledExamples.find((example) => {
     if (!example.message) return false;
     const normalizedExample = normalizeText(example.message);
@@ -642,7 +665,10 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
     if (normalizedExample.length >= 20 && (normalizedText.includes(normalizedExample) || normalizedExample.includes(normalizedText))) return true;
     return getTokenSimilarity(tokens, example.tokens) >= 0.7;
   });
-  let score = matchedKeywords.length * 4;
+  let score = matchedKeywords.length * 4 + intentMatches.length * 3;
+
+  if (/[?？]|(\?$)/.test(text)) score += 2;
+  if (/\b\d+\s*(kishi|odam|ta|кун|kun|дня|дней)\b/i.test(normalizedText)) score += 2;
 
   if (canceledMatch) {
     return {
@@ -665,6 +691,7 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
     score,
     reasons: [
       matchedKeywords.length ? "kalit so'z" : "",
+      intentMatches.length ? `so'rov belgisi: ${intentMatches.slice(0, 3).join(", ")}` : "",
       approvedHits.length ? `tasdiqlanganlarga o'xshash: ${approvedHits.slice(0, 3).join(", ")}` : "",
     ].filter(Boolean),
   };
@@ -733,12 +760,23 @@ function isAuthorized(req) {
   return header === `Bearer ${secret}` || querySecret === secret;
 }
 
-async function scanGroup(client, group, config, state, learningProfile) {
+function getRequestScanOptions(req) {
+  const manual = isEnabledEnv(req.query?.manual);
+  const rawLimit = Number(req.query?.limit);
+  const rawWindow = Number(req.query?.windowMinutes || req.query?.window);
+  return {
+    manual,
+    messageLimit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : manual ? 300 : undefined,
+    windowMinutes: Number.isFinite(rawWindow) && rawWindow > 0 ? Math.min(rawWindow, 10080) : manual ? 1440 : undefined,
+  };
+}
+
+async function scanGroup(client, group, config, state, learningProfile, options = {}) {
   const entity = await client.getEntity(getEntityInput(group.id));
-  const lastId = Number(state[group.id] || 0);
-  const limit = getScanMessageLimit();
+  const lastId = options.manual ? 0 : Number(state[group.id] || 0);
+  const limit = getScanMessageLimit(options);
   const shouldScanHistory = process.env.TELEGRAM_GROUP_LEADS_SCAN_HISTORY === "true";
-  const windowMinutes = getScanWindowMinutes(config);
+  const windowMinutes = getScanWindowMinutes(config, options);
   const cutoffDate = shouldScanHistory ? null : new Date(Date.now() - windowMinutes * 60 * 1000);
   const found = [];
   let newestId = lastId;
@@ -798,6 +836,7 @@ export default async function handler(req, res) {
   }
 
   try {
+    const scanOptions = getRequestScanOptions(req);
     const result = await withAdminClient(async (client) => {
       const errors = [];
       const config = await readLatestMarker(client, GROUP_LEADS_CONFIG_MARKER, errors);
@@ -814,15 +853,17 @@ export default async function handler(req, res) {
       let sent = 0;
       let checked = 0;
       let skippedOld = 0;
+      const maxSend = scanOptions.manual ? 30 : 100;
 
       for (const group of groups) {
         try {
-          const scan = await scanGroup(client, group, config, state, learningProfile);
+          const scan = await scanGroup(client, group, config, state, learningProfile, scanOptions);
           nextState[group.id] = scan.newestId;
           checked += scan.checked || 0;
           skippedOld += scan.skippedOld || 0;
 
           for (const lead of scan.found) {
+            if (sent >= maxSend) break;
             await sendBotMessage(
               token,
               chatId,
@@ -847,8 +888,10 @@ export default async function handler(req, res) {
         checked,
         skippedOld,
         sent,
-        windowMinutes: getScanWindowMinutes(config),
-        messageLimit: getScanMessageLimit(),
+        manual: scanOptions.manual,
+        windowMinutes: getScanWindowMinutes(config, scanOptions),
+        messageLimit: getScanMessageLimit(scanOptions),
+        maxSend,
         keywordCount: getLeadKeywords(config).length,
         approvedMemory: learningProfile.approvedCount,
         canceledMemory: learningProfile.canceledCount,
