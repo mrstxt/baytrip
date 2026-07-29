@@ -1618,16 +1618,20 @@ function extractApprovalLeadData(text) {
 
   const username = normalizeTelegramUsername(rawText.match(/@([a-zA-Z0-9_]{5,32})/)?.[1]);
   const messageText = extractLeadBlockValue(rawText, "Xabar") || extractLeadLineValue(rawText, "Xabar");
+  const link = clean(extractLeadLineValue(rawText, "Asl xabar"), "");
+  const linkMatch = link.match(/https:\/\/t\.me\/c\/(\d+)\/(\d+)/);
 
   if (rawText.includes("Guruhdan yangi lid") || rawText.includes("Kim yozdi:")) {
     return {
       source: "group-lead",
+      groupId: linkMatch ? `-100${linkMatch[1]}` : "",
+      messageId: linkMatch ? Number(linkMatch[2]) : null,
       username,
       sender: clean(extractLeadLineValue(rawText, "Kim yozdi"), "Mijoz"),
       groupTitle: clean(extractLeadLineValue(rawText, "Qaysi guruh"), "Telegram guruh"),
       message: messageText,
       matchedKeywords: parseListValue(extractLeadLineValue(rawText, "Kalit so'z")),
-      link: clean(extractLeadLineValue(rawText, "Asl xabar"), ""),
+      link,
     };
   }
 
@@ -1671,9 +1675,26 @@ function extractLeadBlockValue(text, label) {
 }
 
 function stripLeadDataMarkers(text) {
-  return String(text ?? "")
-    .split("\n")
-    .filter((line) => !line.includes(SITE_LEAD_DATA_MARKER) && !line.includes(GROUP_LEAD_DATA_MARKER))
+  const lines = String(text ?? "").split("\n");
+  const kept = [];
+  let skipNextEncoded = false;
+
+  for (const line of lines) {
+    if (line.includes(SITE_LEAD_DATA_MARKER) || line.includes(GROUP_LEAD_DATA_MARKER)) {
+      skipNextEncoded = true;
+      continue;
+    }
+
+    if (skipNextEncoded && /^[A-Za-z0-9+/]{16,}={0,2}$/.test(line.trim())) {
+      skipNextEncoded = false;
+      continue;
+    }
+
+    skipNextEncoded = false;
+    kept.push(line);
+  }
+
+  return kept
     .join("\n")
     .trim();
 }

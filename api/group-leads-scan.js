@@ -591,17 +591,6 @@ function buildLeadText(lead) {
   const { group, message, matchedKeywords, score, reasons } = lead;
   const link = getMessageLink(group.id, message.id);
   const sender = getSenderLabel(message);
-  const marker = buildMarkerText(GROUP_LEAD_DATA_MARKER, {
-    source: "group-lead",
-    groupId: normalizeGroupIdInput(group.id),
-    groupTitle: clean(group.title, group.id),
-    messageId: message.id,
-    username: getSenderUsername(message),
-    sender,
-    message: clean(message.message),
-    matchedKeywords,
-    link,
-  });
   const lines = [
     "<b>🔎 Guruhdan yangi lid</b>",
     "",
@@ -617,8 +606,6 @@ function buildLeadText(lead) {
   if (link) {
     lines.push(`🔗 <b>Asl xabar:</b> ${escapeHtml(link)}`);
   }
-
-  lines.push("", marker);
 
   return lines.join("\n");
 }
