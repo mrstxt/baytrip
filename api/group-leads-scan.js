@@ -454,13 +454,21 @@ function getScanMessageLimit(options = {}) {
 }
 
 function getMessageDate(message) {
-  return message?.date instanceof Date ? message.date : new Date(message?.date);
+  if (message?.date instanceof Date) return message.date;
+
+  const rawDate = message?.date;
+  if (typeof rawDate === "number") {
+    return new Date(rawDate < 100000000000 ? rawDate * 1000 : rawDate);
+  }
+
+  return new Date(rawDate);
 }
 
 function isWithinScanWindow(message, cutoffDate) {
   if (!cutoffDate) return true;
   const messageDate = getMessageDate(message);
-  return Number.isFinite(messageDate.getTime()) && messageDate >= cutoffDate;
+  if (!Number.isFinite(messageDate.getTime())) return true;
+  return messageDate >= cutoffDate;
 }
 
 function getSenderLabel(message) {
@@ -562,7 +570,7 @@ function buildLeadText(lead) {
     `👥 <b>Qaysi guruh:</b> ${escapeHtml(clean(group.title, group.id))}`,
     `🏷 <b>Kalit so'z:</b> ${escapeHtml(matchedKeywords.join(", "))}`,
     `🧠 <b>Tahlil balli:</b> ${escapeHtml(score || matchedKeywords.length)}${reasons?.length ? ` (${escapeHtml(reasons.join(", "))})` : ""}`,
-    `🕒 <b>Vaqt:</b> ${escapeHtml(formatDate(message.date))}`,
+    `🕒 <b>Vaqt:</b> ${escapeHtml(formatDate(getMessageDate(message)))}`,
   ];
 
   if (link) {

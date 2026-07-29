@@ -86,6 +86,17 @@ function normalizeText(value) {
     .trim();
 }
 
+function getTelegramMessageDate(message) {
+  if (message?.date instanceof Date) return message.date;
+
+  const rawDate = message?.date;
+  if (typeof rawDate === "number") {
+    return new Date(rawDate < 100000000000 ? rawDate * 1000 : rawDate);
+  }
+
+  return new Date(rawDate);
+}
+
 function normalizeTelegramUsername(value) {
   return clean(value, "").replace(/^@+/, "");
 }
@@ -764,7 +775,7 @@ async function collectLiveChatStats(token) {
         messages += 1;
         scannedMessages += 1;
         lastText ||= text.slice(0, 80);
-        const messageDate = message.date instanceof Date ? message.date : new Date(message.date);
+        const messageDate = getTelegramMessageDate(message);
         if (messageDate >= todayStart) {
           today += 1;
           todayMessages += 1;
@@ -856,7 +867,7 @@ async function runLiveChatAutomation(token) {
       for await (const message of iterator) {
         const text = clean(message.message, "");
         if (!text || message.out) continue;
-        const messageDate = message.date instanceof Date ? message.date : new Date(message.date);
+        const messageDate = getTelegramMessageDate(message);
         if (messageDate < minDate) {
           stale += 1;
           break;
@@ -1839,7 +1850,7 @@ async function getLeadStats() {
         if (!text) continue;
         totalScanned += 1;
 
-        const messageDate = message.date instanceof Date ? message.date : new Date(message.date);
+        const messageDate = getTelegramMessageDate(message);
         const isToday = messageDate >= todayStart;
         const requestText = getLeadRequestText(text);
         if (requestText) incrementCount(requestTypes, classifyRequestText(requestText));
