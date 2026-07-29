@@ -35,6 +35,7 @@ const BUTTON_GROUP_LEADS = "🔎 Guruh lidlari";
 const BUTTON_LEAD_SCANNER = "🧭 Lid skaner";
 const BUTTON_LIVE_CHAT = "💬 Jonli suhbat";
 const BUTTON_LIVE_CHAT_STATS = "📊 Suhbatlashuv statistikasi";
+const BUTTON_LIVE_CHAT_RUN = "▶️ Suhbat scan";
 const BUTTON_LIVE_CHAT_TOGGLE_ON = "▶️ Suhbatni yoqish";
 const BUTTON_LIVE_CHAT_TOGGLE_OFF = "⏸ Suhbatni o'chirish";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
@@ -280,7 +281,7 @@ function getDialogScannerGroupId(entity) {
   const id = getEntityNumericId(entity);
   if (!id) return "";
 
-  if (className === "Channel") {
+  if (className === "Channel" || entity?.megagroup || entity?.gigagroup || entity?.broadcast === false) {
     return id.startsWith("-100") ? id : `-100${id.replace(/^-+/, "")}`;
   }
 
@@ -294,7 +295,8 @@ function getDialogScannerGroupId(entity) {
 function isScannableProfileGroup(entity) {
   const className = clean(entity?.className || entity?.constructor?.name, "");
   if (className === "Chat") return true;
-  if (className !== "Channel") return false;
+  if (entity?.megagroup || entity?.gigagroup) return true;
+  if (className !== "Channel") return Boolean(entity?.title && !entity?.bot && !entity?.self && entity?.broadcast !== true);
   return Boolean(entity?.megagroup || entity?.gigagroup);
 }
 
@@ -510,8 +512,9 @@ function buildAdminPanelKeyboard() {
   return {
     keyboard: [
       [{ text: BUTTON_PROMO }, { text: BUTTON_BAYCLUB_PRICES }],
-      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_LEAD_SCANNER }],
-      [{ text: BUTTON_LIVE_CHAT }],
+      [{ text: BUTTON_GROUP_LEADS }, { text: BUTTON_PROFILE_GROUPS }],
+      [{ text: BUTTON_LEAD_SCANNER }, { text: BUTTON_LIVE_CHAT }],
+      [{ text: BUTTON_LIVE_CHAT_RUN }],
       [{ text: BUTTON_STATS }, { text: BUTTON_RECENT_ACTIONS }],
       [{ text: BUTTON_CLEANUP }],
       [{ text: BUTTON_LOGOUT }],
@@ -537,6 +540,7 @@ function buildGroupLeadsKeyboard() {
 function buildLiveChatKeyboard(config) {
   return {
     keyboard: [
+      [{ text: BUTTON_LIVE_CHAT_RUN }],
       [{ text: BUTTON_LIVE_CHAT_STATS }],
       [{ text: config?.enabled ? BUTTON_LIVE_CHAT_TOGGLE_OFF : BUTTON_LIVE_CHAT_TOGGLE_ON }],
       [{ text: BUTTON_BACK }],
@@ -1018,9 +1022,9 @@ function buildLiveChatAutoReply(text) {
   ].join("\n");
 }
 
-async function runLiveChatAutomation(token) {
+async function runLiveChatAutomation(token, options = {}) {
   const config = await getLiveChatConfig();
-  if (!config.enabled) {
+  if (!config.enabled && !options.force) {
     return { ok: true, enabled: false, scanned: 0, replied: 0, skipped: 0 };
   }
 
@@ -1072,13 +1076,13 @@ async function runLiveChatAutomation(token) {
 
     const nextMemory = {
       ...memory,
-      enabled: true,
+      enabled: config.enabled || Boolean(options.force),
       automationLastRunAt: new Date().toISOString(),
       automation: { scanned, replied, skipped, stale },
       answeredMessages,
     };
     await saveLiveChatMemory(token, nextMemory);
-    return { ok: true, enabled: true, scanned, replied, skipped, stale, scanWindowMinutes: Number.isFinite(scanWindowMinutes) ? scanWindowMinutes : 30 };
+    return { ok: true, enabled: config.enabled || Boolean(options.force), forced: Boolean(options.force), scanned, replied, skipped, stale, scanWindowMinutes: Number.isFinite(scanWindowMinutes) ? scanWindowMinutes : 30 };
   });
 }
 
@@ -1107,7 +1111,8 @@ function buildLiveChatMenuMessage(config) {
       ? "Yoqilgan rejim: profil session o'qilmagan shaxsiy chatlarni tahlil qiladi va mos kelganlariga javob yuboradi."
       : "O'chirilgan rejim: bot faqat profil chatlarini tahlil qilib, baza yig'adi.",
     "",
-    "Haqiqiy real-time uchun serverda <code>npm run telegram:live</code> worker ishlashi kerak.",
+    "<b>▶️ Suhbat scan</b> tugmasi hoziroq profil chatlarini bir marta tekshiradi va javob yuboradi.",
+    "Haqiqiy sekundma-sekund real-time uchun serverda <code>npm run telegram:live</code> worker ishlab turishi kerak.",
     "Avto-javob qayta-qayta spam qilmaslik uchun oxirgi javob berilgan xabarlarni xotirada saqlaydi.",
   ].join("\n");
 }
@@ -3269,6 +3274,7 @@ async function handleBotUpdate(body, token, context = {}) {
     BUTTON_GROUP_LEADS,
     BUTTON_LEAD_SCANNER,
     BUTTON_LIVE_CHAT,
+    BUTTON_LIVE_CHAT_RUN,
     BUTTON_LIVE_CHAT_STATS,
     BUTTON_LIVE_CHAT_TOGGLE_ON,
     BUTTON_LIVE_CHAT_TOGGLE_OFF,
@@ -3297,6 +3303,12 @@ async function handleBotUpdate(body, token, context = {}) {
       await runLeadScannerNow(token, chatId, context.baseUrl);
     } else if (text === BUTTON_LIVE_CHAT) {
       await sendLiveChatMenu(token, chatId);
+    } else if (text === BUTTON_LIVE_CHAT_RUN) {
+      await sendBotMessage(token, chatId, "💬 Profil chatlari tekshirilyapti...");
+      const result = await runLiveChatAutomation(token, { force: true });
+      await sendBotMessage(token, chatId, buildLiveChatRunMessage(result), {
+        reply_markup: buildLiveChatKeyboard(await getLiveChatConfig()),
+      });
     } else if (text === BUTTON_LIVE_CHAT_STATS) {
       await sendLiveChatStats(token, chatId);
     } else if (text === BUTTON_LIVE_CHAT_TOGGLE_ON || text === BUTTON_LIVE_CHAT_TOGGLE_OFF) {
@@ -3370,6 +3382,28 @@ async function handleBotUpdate(body, token, context = {}) {
       return { ok: true };
     }
     await sendAdminPanel(token, chatId);
+    return { ok: true };
+  }
+
+  if (text.startsWith("/groups") || text.startsWith("/guruhlar")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await sendAdminProfileGroupsPrompt(token, chatId);
+    return { ok: true };
+  }
+
+  if (text.startsWith("/live") || text.startsWith("/jonli")) {
+    if (!isAllowedAdmin(message)) {
+      await sendBotMessage(token, chatId, buildAdminDeniedText(message));
+      return { ok: true };
+    }
+    await sendBotMessage(token, chatId, "💬 Profil chatlari tekshirilyapti...");
+    const result = await runLiveChatAutomation(token, { force: true });
+    await sendBotMessage(token, chatId, buildLiveChatRunMessage(result), {
+      reply_markup: buildLiveChatKeyboard(await getLiveChatConfig()),
+    });
     return { ok: true };
   }
 
