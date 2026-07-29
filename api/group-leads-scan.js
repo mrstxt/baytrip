@@ -474,11 +474,17 @@ function getEntityInput(groupId) {
 
 async function getReadableEntities(client, chatId) {
   const entities = [];
+  let directEntityError = null;
 
   try {
     entities.push(await client.getEntity(getEntityInput(chatId)));
-  } catch {
+  } catch (error) {
+    directEntityError = error;
     // Dialog title fallback quyida sinab ko'riladi.
+  }
+
+  if (entities.length > 0 && !isEnabledEnv(process.env.TELEGRAM_STORAGE_DIALOG_FALLBACK)) {
+    return entities;
   }
 
   try {
@@ -491,6 +497,10 @@ async function getReadableEntities(client, chatId) {
     }
   } catch {
     // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
+  }
+
+  if (entities.length === 0 && directEntityError) {
+    throw directEntityError;
   }
 
   return entities;
@@ -681,6 +691,15 @@ async function saveState(token, state, scanResult = null) {
   await sendBotMessage(token, chatId, text);
 }
 
+async function saveStateSafely(token, state, scanResult) {
+  try {
+    await saveState(token, state, scanResult);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Scan state saqlanmadi.";
+  }
+}
+
 function isAuthorized(req) {
   const secret = clean(process.env.CRON_SECRET || process.env.TELEGRAM_GROUP_LEADS_CRON_SECRET);
   if (!secret) return true;
@@ -811,7 +830,18 @@ export default async function handler(req, res) {
         canceledMemory: learningProfile.canceledCount,
         errors,
       };
-      await saveState(token, nextState, scanResult);
+
+      const stateError = await saveStateSafely(token, nextState, scanResult);
+      if (stateError) {
+        scanResult.stateSaved = false;
+        scanResult.errors.push({
+          group: "storage",
+          error: `Scan state saqlanmadi: ${stateError}`,
+        });
+      } else {
+        scanResult.stateSaved = true;
+      }
+
       return scanResult;
     });
 

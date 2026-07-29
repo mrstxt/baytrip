@@ -255,11 +255,17 @@ function getTelegramEntityInput(chatId) {
 
 async function getReadableEntities(client, chatId) {
   const entities = [];
+  let directEntityError = null;
 
   try {
     entities.push(await client.getEntity(getTelegramEntityInput(chatId)));
-  } catch {
+  } catch (error) {
+    directEntityError = error;
     // Dialog title fallback quyida sinab ko'riladi.
+  }
+
+  if (entities.length > 0 && !isEnabledEnv(process.env.TELEGRAM_STORAGE_DIALOG_FALLBACK)) {
+    return entities;
   }
 
   try {
@@ -272,6 +278,10 @@ async function getReadableEntities(client, chatId) {
     }
   } catch {
     // Dialog fallback ishlamasa, mavjud entitylar bilan davom etiladi.
+  }
+
+  if (entities.length === 0 && directEntityError) {
+    throw directEntityError;
   }
 
   return entities;
@@ -2121,7 +2131,10 @@ function isDebugRequestAuthorized(req) {
 
 function buildLeadScannerResultMessage(result) {
   if (!result?.ok) {
-    return `Lid skaner ishlamadi: ${escapeHtml(result?.error || "noma'lum xatolik")}`;
+    return [
+      `Lid skaner ishlamadi: ${escapeHtml(result?.error || "noma'lum xatolik")}`,
+      result?.status ? `Status: <b>${escapeHtml(result.status)}</b>` : "",
+    ].filter(Boolean).join("\n");
   }
 
   const errors = Array.isArray(result.errors) ? result.errors : [];
@@ -2135,6 +2148,7 @@ function buildLeadScannerResultMessage(result) {
     `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? DEFAULT_GROUP_LEAD_MESSAGE_LIMIT)} xabar</b>`,
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
     `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
+    result.stateSaved === false ? "Scan state: <b>saqlanmadi</b>" : "",
     errors.length ? "" : "",
     errors.length ? "<b>Xatolar:</b>" : "",
     ...errors.slice(0, 5).map((item) => `${escapeHtml(item.group)}: ${escapeHtml(item.error)}`),
@@ -2155,7 +2169,7 @@ async function runLeadScannerNow(token, chatId, baseUrl) {
     [
       "<b>🧭 Lid skaner boshlandi</b>",
       "",
-      "Har bir sozlangan guruhdan oxirgi 30 ta xabar tekshiriladi.",
+      `Har bir sozlangan guruhdan oxirgi ${DEFAULT_GROUP_LEAD_MESSAGE_LIMIT} ta xabar tekshiriladi.`,
       "Oxirgi 1 soat ichida kalit so'zga yoki tasdiqlangan namunalarga mos lid bo'lsa, belgilangan topicga yuboriladi.",
     ].join("\n")
   );
@@ -2168,8 +2182,12 @@ async function runLeadScannerNow(token, chatId, baseUrl) {
     });
     const result = await response.json().catch(() => ({
       ok: false,
+      status: response.status,
       error: "Skaner javobi JSON formatida emas.",
     }));
+    if (!response.ok && result?.ok !== true) {
+      result.status = response.status;
+    }
 
     await sendBotMessage(token, chatId, buildLeadScannerResultMessage(result), {
       reply_markup: buildAdminPanelKeyboard(),
