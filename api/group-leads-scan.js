@@ -136,6 +136,7 @@ function shouldUseGroupLeadTopics() {
 
 function getStorageChatId() {
   return clean(
+    process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
     DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID
@@ -333,24 +334,36 @@ function parseMarkerJson(text, marker) {
   }
 }
 
-async function readLatestMarker(client, marker) {
+async function readLatestMarker(client, marker, diagnostics = []) {
   const limit = Number(process.env.TELEGRAM_GROUP_LEADS_CONFIG_SCAN_LIMIT || 150);
   const topicIds = getConfigTopicIds();
 
   for (const target of getStorageReadTargets(topicIds)) {
-    const entities = await getReadableEntities(client, target.chatId);
-    for (const entity of entities) {
-      for (const topicId of target.topicIds) {
-        const iterator = client.iterMessages(
-          entity,
-          buildMessageSearchOptions(Number.isFinite(limit) ? limit : 150, topicId)
-        );
+    try {
+      const entities = await getReadableEntities(client, target.chatId);
+      for (const entity of entities) {
+        for (const topicId of target.topicIds) {
+          const iterator = client.iterMessages(
+            entity,
+            buildMessageSearchOptions(Number.isFinite(limit) ? limit : 150, topicId)
+          );
 
-        for await (const message of iterator) {
-          const parsed = parseMarkerJson(message.message, marker);
-          if (parsed) return parsed;
+          for await (const message of iterator) {
+            const parsed = parseMarkerJson(message.message, marker);
+            if (parsed) return parsed;
+          }
         }
       }
+    } catch (error) {
+      console.error("group lead marker read failed", {
+        marker,
+        chatId: target.chatId,
+        error: error instanceof Error ? error.message : error,
+      });
+      diagnostics.push({
+        group: "storage",
+        error: `${marker} o'qilmadi (${target.chatId}): ${error instanceof Error ? error.message : "noma'lum xatolik"}`,
+      });
     }
   }
 
@@ -657,25 +670,36 @@ function scoreLeadMessage(text, matchedKeywords, learningProfile) {
   };
 }
 
-async function readRecentFeedback(client) {
+async function readRecentFeedback(client, diagnostics = []) {
   const limit = Number(process.env.TELEGRAM_GROUP_LEADS_FEEDBACK_SCAN_LIMIT || 250);
   const topicIds = getConfigTopicIds();
   const feedback = [];
 
   for (const target of getStorageReadTargets(topicIds)) {
-    const entities = await getReadableEntities(client, target.chatId);
-    for (const entity of entities) {
-      for (const topicId of target.topicIds) {
-        const iterator = client.iterMessages(
-          entity,
-          buildMessageSearchOptions(Number.isFinite(limit) ? limit : 250, topicId)
-        );
+    try {
+      const entities = await getReadableEntities(client, target.chatId);
+      for (const entity of entities) {
+        for (const topicId of target.topicIds) {
+          const iterator = client.iterMessages(
+            entity,
+            buildMessageSearchOptions(Number.isFinite(limit) ? limit : 250, topicId)
+          );
 
-        for await (const message of iterator) {
-          const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
-          if (parsed) feedback.push(parsed);
+          for await (const message of iterator) {
+            const parsed = parseMarkerJson(message.message, GROUP_LEAD_FEEDBACK_MARKER);
+            if (parsed) feedback.push(parsed);
+          }
         }
       }
+    } catch (error) {
+      console.error("group lead feedback read failed", {
+        chatId: target.chatId,
+        error: error instanceof Error ? error.message : error,
+      });
+      diagnostics.push({
+        group: "storage",
+        error: `${GROUP_LEAD_FEEDBACK_MARKER} o'qilmadi (${target.chatId}): ${error instanceof Error ? error.message : "noma'lum xatolik"}`,
+      });
     }
   }
 
@@ -775,21 +799,21 @@ export default async function handler(req, res) {
 
   try {
     const result = await withAdminClient(async (client) => {
-      const config = await readLatestMarker(client, GROUP_LEADS_CONFIG_MARKER);
+      const errors = [];
+      const config = await readLatestMarker(client, GROUP_LEADS_CONFIG_MARKER, errors);
       if (config?.enabled === false) {
         return { scanned: 0, sent: 0, skipped: "config_missing" };
       }
 
       const groups = getLeadGroups(config);
-      const state = (await readLatestMarker(client, GROUP_LEADS_STATE_MARKER)) || {};
-      const feedback = await readRecentFeedback(client);
+      const state = (await readLatestMarker(client, GROUP_LEADS_STATE_MARKER, errors)) || {};
+      const feedback = await readRecentFeedback(client, errors);
       const learningProfile = buildLearningProfile(feedback);
       const nextState = { ...state };
       const leadTopicId = getLeadTopicId();
       let sent = 0;
       let checked = 0;
       let skippedOld = 0;
-      const errors = [];
 
       for (const group of groups) {
         try {

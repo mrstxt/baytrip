@@ -173,6 +173,7 @@ function normalizeTitle(value) {
 
 function getStorageChatId() {
   return clean(
+    process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
     DEFAULT_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_CHAT_ID,
