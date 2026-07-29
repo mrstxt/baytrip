@@ -37,6 +37,7 @@ const BUTTON_LIVE_CHAT_STATS = "📊 Suhbatlashuv statistikasi";
 const BUTTON_LIVE_CHAT_TOGGLE_ON = "▶️ Suhbatni yoqish";
 const BUTTON_LIVE_CHAT_TOGGLE_OFF = "⏸ Suhbatni o'chirish";
 const BUTTON_GROUPS = "👥 Guruhlarni sozlash";
+const BUTTON_PROFILE_GROUPS = "📋 Profil guruhlari";
 const BUTTON_KEYWORDS = "🔑 Kalit so'zlar";
 const BUTTON_EMPLOYEES = "👤 Hodimlar";
 const BUTTON_STATS = "📊 Statistika";
@@ -186,8 +187,8 @@ function getStorageChatId() {
   return clean(
     process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
-    DEFAULT_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_CHAT_ID,
+    process.env.TELEGRAM_CHAT_ID ||
+    DEFAULT_STORAGE_CHAT_ID,
     ""
   );
 }
@@ -263,6 +264,33 @@ function getTelegramEntityInput(chatId) {
     return new Api.PeerChat({ chatId: id });
   }
   return /^-?\d+$/.test(value) ? Number(value) : value;
+}
+
+function getEntityNumericId(entity) {
+  return String(entity?.id?.value ?? entity?.id ?? "").replace(/n$/, "");
+}
+
+function getDialogScannerGroupId(entity) {
+  const className = clean(entity?.className || entity?.constructor?.name, "");
+  const id = getEntityNumericId(entity);
+  if (!id) return "";
+
+  if (className === "Channel") {
+    return id.startsWith("-100") ? id : `-100${id.replace(/^-+/, "")}`;
+  }
+
+  if (className === "Chat") {
+    return id.startsWith("-") ? id : `-${id}`;
+  }
+
+  return "";
+}
+
+function isScannableProfileGroup(entity) {
+  const className = clean(entity?.className || entity?.constructor?.name, "");
+  if (className === "Chat") return true;
+  if (className !== "Channel") return false;
+  return Boolean(entity?.megagroup || entity?.gigagroup);
 }
 
 async function getReadableEntities(client, chatId) {
@@ -491,7 +519,8 @@ function buildAdminPanelKeyboard() {
 function buildGroupLeadsKeyboard() {
   return {
     keyboard: [
-      [{ text: BUTTON_GROUPS }, { text: BUTTON_KEYWORDS }],
+      [{ text: BUTTON_GROUPS }, { text: BUTTON_PROFILE_GROUPS }],
+      [{ text: BUTTON_KEYWORDS }],
       [{ text: BUTTON_EMPLOYEES }],
       [{ text: BUTTON_BACK }],
     ],
@@ -611,6 +640,7 @@ async function sendGroupLeadsMenu(token, chatId) {
       `Default kalit so'zlar: ${DEFAULT_GROUP_LEAD_KEYWORD_COUNT} ta (${DEFAULT_GROUP_LEAD_RUSSIAN_KEYWORD_COUNT} ta ruscha).`,
       "",
       "Guruhlarni, qo'shimcha kalit so'zlarni va hodimlarni alohida kiritish mumkin.",
+      "Profil guruhlari tugmasi admin profil a'zo bo'lgan guruh IDlarini chiqaradi.",
       "Profil session kiritilgan guruhlarni o'qiy olishi kerak.",
     ].join("\n"),
     { reply_markup: buildGroupLeadsKeyboard() }
@@ -637,6 +667,84 @@ async function sendGroupLeadsGroupsPrompt(token, chatId) {
       },
     }
   );
+}
+
+function buildProfileGroupLine(group) {
+  return `${group.id}=${group.title}`;
+}
+
+async function getAdminProfileGroups() {
+  return withAdminClient(async (client) => {
+    const limit = Number(process.env.TELEGRAM_PROFILE_GROUPS_SCAN_LIMIT || 300);
+    const dialogs = await client.getDialogs({ limit: Number.isFinite(limit) ? limit : 300 });
+    const groups = [];
+    const seen = new Set();
+
+    for (const dialog of dialogs) {
+      const entity = dialog.entity;
+      if (!isScannableProfileGroup(entity)) continue;
+
+      const id = getDialogScannerGroupId(entity);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      groups.push({
+        id,
+        title: clean(entity?.title || dialog.title, id).replace(/\s+/g, " "),
+      });
+    }
+
+    return groups.sort((left, right) => left.title.localeCompare(right.title, "uz"));
+  });
+}
+
+async function sendAdminProfileGroupsPrompt(token, chatId) {
+  try {
+    const groups = await getAdminProfileGroups();
+    if (!groups.length) {
+      await sendBotMessage(
+        token,
+        chatId,
+        [
+          "Admin profil a'zo bo'lgan guruhlar topilmadi.",
+          "",
+          "TELEGRAM_ADMIN_SESSION to'g'ri profilniki ekanini va profil kerakli guruhlarga a'zo ekanini tekshiring.",
+        ].join("\n"),
+        { reply_markup: buildGroupLeadsKeyboard() }
+      );
+      return;
+    }
+
+    const maxRows = Number(process.env.TELEGRAM_PROFILE_GROUPS_MESSAGE_LIMIT || 40);
+    const safeMaxRows = Number.isFinite(maxRows) && maxRows > 0 ? Math.min(maxRows, 80) : 40;
+    const visibleGroups = groups.slice(0, safeMaxRows);
+    await sendBotMessage(
+      token,
+      chatId,
+      [
+        GROUP_LEADS_GROUPS_REPLY_MARKER,
+        "",
+        `Admin profil guruhlari: ${groups.length} ta.`,
+        `Quyida scannerga qo'shish mumkin bo'lgan birinchi ${visibleGroups.length} ta guruh bor.`,
+        "",
+        "Scanner ishlasin degan guruhlarni qoldirib, kerakmaslarini o'chirib, shu xabarga reply yuboring:",
+        "",
+        `<code>${escapeHtml(visibleGroups.map(buildProfileGroupLine).join("\n"))}</code>`,
+      ].join("\n"),
+      {
+        reply_markup: {
+          force_reply: true,
+          input_field_placeholder: "-1001234567890=Guruh nomi...",
+        },
+      }
+    );
+  } catch (error) {
+    await sendBotMessage(
+      token,
+      chatId,
+      `Profil guruhlarini o'qishda xatolik: ${escapeHtml(error instanceof Error ? error.message : "noma'lum xatolik")}`,
+      { reply_markup: buildGroupLeadsKeyboard() }
+    );
+  }
 }
 
 async function sendGroupLeadsKeywordsPrompt(token, chatId) {
@@ -678,12 +786,15 @@ async function sendGroupLeadsEmployeesPrompt(token, chatId) {
 }
 
 function normalizeLiveChatConfig(config) {
+  const envEnabled = isEnabledEnv(process.env.TELEGRAM_LIVE_CHAT_ENABLED);
+  const enabled = config?.enabled === true || (!config && envEnabled);
   return {
-    enabled: config?.enabled === true,
-    analysisOnly: config?.enabled !== true,
+    enabled,
+    analysisOnly: !enabled,
     enabledAt: clean(config?.enabledAt, ""),
     disabledAt: clean(config?.disabledAt, ""),
     updatedAt: clean(config?.updatedAt, new Date().toISOString()),
+    source: config ? "storage" : envEnabled ? "env" : "default",
   };
 }
 
@@ -1359,9 +1470,9 @@ function getGroupLeadEmployeesFromEnv() {
     .filter(Boolean);
 }
 
-async function getGroupLeadEmployees(callback) {
+async function getGroupLeadEmployees() {
   if (groupLeadEmployeesCache) {
-    return groupLeadEmployeesCache.length ? groupLeadEmployeesCache : [getCallbackUserName(callback)];
+    return groupLeadEmployeesCache;
   }
 
   try {
@@ -1372,11 +1483,11 @@ async function getGroupLeadEmployees(callback) {
     groupLeadEmployeesCache = getGroupLeadEmployeesFromEnv();
   }
 
-  return groupLeadEmployeesCache.length ? groupLeadEmployeesCache : [getCallbackUserName(callback)];
+  return groupLeadEmployeesCache;
 }
 
-async function buildGroupLeadEmployeeKeyboard(callback) {
-  const employees = await getGroupLeadEmployees(callback);
+async function buildGroupLeadEmployeeKeyboard() {
+  const employees = await getGroupLeadEmployees();
   const rows = employees.map((name, index) => ([
     {
       text: name,
@@ -1400,8 +1511,8 @@ function buildLeadApprovalKeyboard() {
 
 async function getGroupLeadEmployeeByCallback(callback, data) {
   const index = Number(String(data).replace(GROUP_LEAD_AGENT_CALLBACK_PREFIX, ""));
-  const employees = await getGroupLeadEmployees(callback);
-  return employees[Number.isInteger(index) && index >= 0 ? index : 0] || getCallbackUserName(callback);
+  const employees = await getGroupLeadEmployees();
+  return employees[Number.isInteger(index) && index >= 0 ? index : 0] || "";
 }
 
 function extractApprovalLeadData(text) {
@@ -2149,7 +2260,7 @@ function buildLeadScannerResultMessage(result) {
     ].filter(Boolean).join("\n");
   }
 
-  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const errors = Array.isArray(result.errors) ? result.errors.filter((item) => item?.group !== "storage") : [];
   return [
     "<b>🧭 Lid skaner yakunlandi</b>",
     "",
@@ -2161,6 +2272,7 @@ function buildLeadScannerResultMessage(result) {
     `Scan oynasi: <b>${escapeHtml(result.windowMinutes ?? 60)} daqiqa</b>`,
     `Har guruhdan limit: <b>${escapeHtml(result.messageLimit ?? DEFAULT_GROUP_LEAD_MESSAGE_LIMIT)} xabar</b>`,
     result.maxSend ? `Yuborish limiti: <b>${escapeHtml(result.maxSend)}</b>` : "",
+    result.stoppedByFloodWait ? `Telegram limiti: <b>${escapeHtml(result.floodWaitSeconds || 0)} sekunddan keyin yana scan qiling</b>` : "",
     `Kalit so'zlar: <b>${escapeHtml(result.keywordCount ?? 100)}</b>`,
     `Xotira: <b>${escapeHtml(result.approvedMemory ?? 0)}</b> tasdiqlangan, <b>${escapeHtml(result.canceledMemory ?? 0)}</b> bekor qilingan`,
     result.stateSaved === false ? "Scan state: <b>saqlanmadi</b>" : "",
@@ -2755,11 +2867,27 @@ async function handleBotUpdate(body, token, context = {}) {
         return { ok: true };
       }
 
+      const employees = await getGroupLeadEmployees();
+      if (!employees.length) {
+        await sendBotMessage(
+          token,
+          chatId,
+          [
+            "Hodimlar ro'yxati topilmadi.",
+            "",
+            "Admin paneldan <b>🔎 Guruh lidlari</b> → <b>👤 Hodimlar</b> bo'limiga kirib ismlarni kiriting.",
+            "Yoki Vercel envga <code>TELEGRAM_GROUP_LEADS_EMPLOYEES=Shoxruza,Sohibjon,Aziz</code> qo'ying.",
+          ].join("\n"),
+          callback.message?.message_thread_id ? { message_thread_id: callback.message.message_thread_id } : {}
+        );
+        return { ok: true };
+      }
+
       await editMessageReplyMarkup(
         token,
         chatId,
         callback.message.message_id,
-        await buildGroupLeadEmployeeKeyboard(callback)
+        await buildGroupLeadEmployeeKeyboard()
       );
       return { ok: true };
     }
@@ -2797,6 +2925,15 @@ async function handleBotUpdate(body, token, context = {}) {
       const employeeName = await getGroupLeadEmployeeByCallback(callback, data);
       if (!leadData) {
         await sendBotMessage(token, chatId, "Lid ma'lumotlari topilmadi yoki eski formatdagi xabar.");
+        return { ok: true };
+      }
+      if (!employeeName) {
+        await editMessageReplyMarkup(
+          token,
+          chatId,
+          callback.message.message_id,
+          await buildGroupLeadEmployeeKeyboard()
+        );
         return { ok: true };
       }
 
@@ -2997,6 +3134,7 @@ async function handleBotUpdate(body, token, context = {}) {
     BUTTON_LIVE_CHAT_TOGGLE_ON,
     BUTTON_LIVE_CHAT_TOGGLE_OFF,
     BUTTON_GROUPS,
+    BUTTON_PROFILE_GROUPS,
     BUTTON_KEYWORDS,
     BUTTON_EMPLOYEES,
     BUTTON_STATS,
@@ -3026,6 +3164,8 @@ async function handleBotUpdate(body, token, context = {}) {
       await toggleLiveChat(token, chatId);
     } else if (text === BUTTON_GROUPS) {
       await sendGroupLeadsGroupsPrompt(token, chatId);
+    } else if (text === BUTTON_PROFILE_GROUPS) {
+      await sendAdminProfileGroupsPrompt(token, chatId);
     } else if (text === BUTTON_KEYWORDS) {
       await sendGroupLeadsKeywordsPrompt(token, chatId);
     } else if (text === BUTTON_EMPLOYEES) {

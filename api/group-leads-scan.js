@@ -138,8 +138,8 @@ function getStorageChatId() {
   return clean(
     process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
-    DEFAULT_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_CHAT_ID
+    process.env.TELEGRAM_CHAT_ID ||
+    DEFAULT_STORAGE_CHAT_ID
   );
 }
 
@@ -265,7 +265,16 @@ function getLeadTopicId() {
   );
 }
 
+class TelegramFloodWaitError extends Error {
+  constructor(retryAfter) {
+    super(`Telegram flood limit: retry after ${retryAfter}`);
+    this.retryAfter = retryAfter;
+    this.isFloodWait = true;
+  }
+}
+
 async function sendBotMessage(token, chatId, text, extra = {}) {
+  const { __maxRetryAfter = 8, ...telegramExtra } = extra || {};
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -274,15 +283,29 @@ async function sendBotMessage(token, chatId, text, extra = {}) {
       text,
       parse_mode: "HTML",
       disable_web_page_preview: true,
-      ...extra,
+      ...telegramExtra,
     }),
   });
 
   const data = await response.json().catch(() => null);
+  const retryAfter = Number(data?.parameters?.retry_after);
+  if (response.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+    if (retryAfter > __maxRetryAfter) {
+      throw new TelegramFloodWaitError(retryAfter);
+    }
+
+    await wait((retryAfter + 1) * 1000);
+    return sendBotMessage(token, chatId, text, extra);
+  }
+
   if (!response.ok || !data?.ok) {
     throw new Error(data?.description || "Telegramga xabar yuborilmadi.");
   }
   return data;
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function withAdminClient(fn) {
@@ -359,10 +382,6 @@ async function readLatestMarker(client, marker, diagnostics = []) {
         marker,
         chatId: target.chatId,
         error: error instanceof Error ? error.message : error,
-      });
-      diagnostics.push({
-        group: "storage",
-        error: `${marker} o'qilmadi (${target.chatId}): ${error instanceof Error ? error.message : "noma'lum xatolik"}`,
       });
     }
   }
@@ -592,7 +611,7 @@ function buildLeadApprovalKeyboard() {
 }
 
 function buildScanSummaryText(result) {
-  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const errors = Array.isArray(result.errors) ? result.errors.filter((item) => item?.group !== "storage") : [];
   return [
     "<b>🧭 Lid skaner yakunlandi</b>",
     "",
@@ -731,10 +750,6 @@ async function readRecentFeedback(client, diagnostics = []) {
         chatId: target.chatId,
         error: error instanceof Error ? error.message : error,
       });
-      diagnostics.push({
-        group: "storage",
-        error: `${GROUP_LEAD_FEEDBACK_MARKER} o'qilmadi (${target.chatId}): ${error instanceof Error ? error.message : "noma'lum xatolik"}`,
-      });
     }
   }
 
@@ -747,7 +762,7 @@ async function saveState(token, state, scanResult = null) {
     ? [buildScanSummaryText(scanResult), "", buildMarkerText(GROUP_LEADS_STATE_MARKER, state)].join("\n")
     : buildMarkerText(GROUP_LEADS_STATE_MARKER, state);
 
-  await sendBotMessage(token, chatId, text);
+  await sendBotMessage(token, chatId, text, { __maxRetryAfter: 3 });
 }
 
 async function saveStateSafely(token, state, scanResult) {
@@ -861,8 +876,15 @@ export default async function handler(req, res) {
       let sent = 0;
       let checked = 0;
       let skippedOld = 0;
-      const maxSend = scanOptions.manual ? 30 : 100;
+      const manualMaxSend = Number(process.env.TELEGRAM_GROUP_LEADS_MANUAL_MAX_SEND || 12);
+      const cronMaxSend = Number(process.env.TELEGRAM_GROUP_LEADS_CRON_MAX_SEND || 30);
+      const maxSend = scanOptions.manual
+        ? Math.min(Number.isFinite(manualMaxSend) && manualMaxSend > 0 ? manualMaxSend : 12, 12)
+        : Math.min(Number.isFinite(cronMaxSend) && cronMaxSend > 0 ? cronMaxSend : 30, 30);
+      let stoppedByFloodWait = false;
+      let floodWaitSeconds = 0;
 
+      scanLoop:
       for (const group of groups) {
         try {
           const scan = await scanGroup(client, group, config, state, learningProfile, scanOptions);
@@ -879,11 +901,19 @@ export default async function handler(req, res) {
               {
                 ...(leadTopicId ? { message_thread_id: leadTopicId } : {}),
                 reply_markup: buildLeadApprovalKeyboard(),
+                __maxRetryAfter: 8,
               }
             );
             sent += 1;
+            await wait(Number(process.env.TELEGRAM_GROUP_LEADS_SEND_DELAY_MS || 3500));
           }
         } catch (error) {
+          if (error?.isFloodWait) {
+            stoppedByFloodWait = true;
+            floodWaitSeconds = Math.max(floodWaitSeconds, Number(error.retryAfter) || 0);
+            break scanLoop;
+          }
+
           errors.push({
             group: group.id,
             error: error instanceof Error ? error.message : "noma'lum xatolik",
@@ -900,6 +930,8 @@ export default async function handler(req, res) {
         windowMinutes: getScanWindowMinutes(config, scanOptions),
         messageLimit: getScanMessageLimit(scanOptions),
         maxSend,
+        stoppedByFloodWait,
+        floodWaitSeconds,
         keywordCount: getLeadKeywords(config).length,
         approvedMemory: learningProfile.approvedCount,
         canceledMemory: learningProfile.canceledCount,
@@ -909,10 +941,7 @@ export default async function handler(req, res) {
       const stateError = await saveStateSafely(token, nextState, scanResult);
       if (stateError) {
         scanResult.stateSaved = false;
-        scanResult.errors.push({
-          group: "storage",
-          error: `Scan state saqlanmadi: ${stateError}`,
-        });
+        console.error("group lead scan state save failed", { error: stateError });
       } else {
         scanResult.stateSaved = true;
       }

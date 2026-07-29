@@ -77,9 +77,10 @@ function normalizeTitle(value) {
 
 function getStorageChatId() {
   return clean(
+    process.env.TELEGRAM_GROUP_LEADS_STORAGE_CHAT_ID ||
     process.env.TELEGRAM_STORAGE_CHAT_ID ||
-    DEFAULT_STORAGE_CHAT_ID ||
-    process.env.TELEGRAM_CHAT_ID
+    process.env.TELEGRAM_CHAT_ID ||
+    DEFAULT_STORAGE_CHAT_ID
   );
 }
 
@@ -136,7 +137,14 @@ async function getStorageEntity(client) {
 }
 
 async function readLatestMarker(client, marker, limit = 80) {
-  const entity = await getStorageEntity(client);
+  let entity = null;
+  try {
+    entity = await getStorageEntity(client);
+  } catch (error) {
+    console.error("live-chat storage read skipped", error instanceof Error ? error.message : error);
+    return null;
+  }
+
   const iterator = client.iterMessages(entity, { limit });
 
   for await (const message of iterator) {
@@ -148,8 +156,10 @@ async function readLatestMarker(client, marker, limit = 80) {
 }
 
 function normalizeLiveChatConfig(config) {
+  const envEnabled = ["1", "true", "yes", "on"].includes(clean(process.env.TELEGRAM_LIVE_CHAT_ENABLED).toLowerCase());
+  const enabled = config?.enabled === true || (!config && envEnabled);
   return {
-    enabled: config?.enabled === true,
+    enabled,
     enabledAt: clean(config?.enabledAt),
     disabledAt: clean(config?.disabledAt),
     updatedAt: clean(config?.updatedAt),
@@ -186,10 +196,14 @@ async function saveLiveChatMemory(client, memory) {
   memoryCache.loadedAt = Date.now();
 
   savingMemory = savingMemory.then(async () => {
-    const entity = await getStorageEntity(client);
-    await client.sendMessage(entity, {
-      message: buildMarkerText(LIVE_CHAT_MEMORY_MARKER, memoryCache.value),
-    });
+    try {
+      const entity = await getStorageEntity(client);
+      await client.sendMessage(entity, {
+        message: buildMarkerText(LIVE_CHAT_MEMORY_MARKER, memoryCache.value),
+      });
+    } catch (error) {
+      console.error("live-chat memory save skipped", error instanceof Error ? error.message : error);
+    }
   });
 
   await savingMemory;
@@ -295,7 +309,6 @@ async function main() {
   });
 
   await client.connect();
-  await getStorageEntity(client);
   const liveConfig = await getLiveChatConfig(client, { force: true });
 
   console.log("BayTrip live chat worker started", {
