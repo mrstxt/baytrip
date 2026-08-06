@@ -44,7 +44,7 @@ const emptyTourBase = (): Omit<TourBase, "id"> => ({
   currency: "usd",
 });
 
-const ADMIN_PASSWORD = "baytrip2025";
+const ADMIN_PASSWORD = "sovobay12";
 
 /* ─────────────────── Login ─────────────────── */
 
