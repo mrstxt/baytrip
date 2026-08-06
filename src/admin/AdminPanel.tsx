@@ -95,7 +95,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           </button>
         </form>
         <p className="mt-6 text-center text-xs text-ink-soft">
-          Standart parol: <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold">baytrip2025</code>
+          Admin panelga kirish uchun berilgan  <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] font-bold">paroldi kiriting</code>
         </p>
       </div>
     </div>
