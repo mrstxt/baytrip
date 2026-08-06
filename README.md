@@ -37,6 +37,8 @@ Baytrip - React + Vite asosida qilingan turizm landing/app. Saytda tur paketlari
 - `src/components/Sections.tsx` - aloqa/murojaat formasi, FAQ, kompaniya bo'limlari.
 - `src/components/BayClub.tsx` - BayClub Card UI va ariza formasi.
 - `src/components/Footer.tsx` - footer va aksiyalar obunasi.
+- `src/toursStore.tsx` - tur paketlarini localStorage orqali boshqaruvchi store (CRUD).
+- `src/admin/AdminPanel.tsx` - paketlar kartochkalarini qo'shish/o'zgartirish/o'chirish uchun admin panel.
 - `src/lib/leads.ts` - frontenddan `/api/telegram` ga ariza yuboruvchi helper.
 - `api/telegram.js` - asosiy Telegram webhook, ariza endpointi va bot admin panel.
 - `api/bayclub-config.js` - BayClub narxlarini Telegram storage guruhidan yoki eski config topicdan o'qiydigan endpoint.
@@ -466,6 +468,16 @@ Admin paneldagi `📊 Statistika` tugmasi asosiy guruh va mavjud topiclardagi le
 `TELEGRAM_LEAD_STATS_SCAN_LIMIT` nechta oxirgi xabar scan qilinishini belgilaydi.
 
 ## Ishga tushirish
+
+### Admin Panel (Paketlar boshqaruvi)
+
+Saytga `/#/admin` URL orqali admin paneliga kiring. Parol: `baytrip2025`
+
+Admin panelda:
+- Xalqaro va ichki tur paketlarini ko'rish, qo'shish, tahrirlash, o'chirish
+- Har bir paket uchun: sarlavha, rasm, narx, muddat, marshrut (itinerary), teglar va boshqalar
+- O'zgarishlar localStorage'da saqlanadi va darhol saytda ko'rinadi
+- "Asliga qaytarish" tugmasi barcha o'zgarishlarni bekor qiladi
 
 Dependencylarni o'rnatish:
 

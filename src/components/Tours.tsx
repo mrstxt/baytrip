@@ -7,8 +7,9 @@ import {
   MapPin,
   Star,
 } from "lucide-react";
-import { CATEGORIES, TOURS, formatPrice, type Tour } from "../data";
+import { CATEGORIES, formatPrice, type Tour } from "../data";
 import { useApp } from "../store";
+import { useTours } from "../toursStore";
 import { cn } from "../utils/cn";
 import { getTodayInputValue, getUpcomingTourDates } from "../utils/tourDates";
 import Reveal from "./Reveal";
@@ -30,15 +31,16 @@ function HotPill({ seats }: { seats?: number }) {
 
 export default function Tours() {
   const { category, setCategory } = useApp();
+  const { tours: TOURS } = useTours();
   const [selected, setSelected] = useState<Tour | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
   const [cardDates, setCardDates] = useState<Record<string, string>>({});
   const scroller = useRef<HTMLDivElement>(null);
 
-  const hot = useMemo(() => TOURS.filter(isHot).sort((a, b) => b.reviews - a.reviews), []);
+  const hot = useMemo(() => TOURS.filter(isHot).sort((a, b) => b.reviews - a.reviews), [TOURS]);
   const filtered = useMemo(
     () => (category === "all" ? TOURS : TOURS.filter((t) => t.category === category)),
-    [category]
+    [category, TOURS]
   );
 
   const scrollBy = (dir: number) =>

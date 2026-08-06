@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowRight, BadgeCheck, RefreshCw, Target, TrendingUp } from "lucide-react";
-import { DOMESTIC_TOURS, TOURS, formatPrice, type TourBase } from "../data";
+import { formatPrice, type TourBase } from "../data";
+import { useTours } from "../toursStore";
 import Reveal from "./Reveal";
 import TourModal from "./TourModal";
 
@@ -95,6 +96,7 @@ const QUESTIONS = (region: Region) => [
 ];
 
 export default function TourAnalyzer() {
+  const { tours: TOURS, domesticTours: DOMESTIC_TOURS } = useTours();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Answers>({
     region: "",

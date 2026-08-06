@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Clock, Compass, MapPin, Sparkles, Star } from "lucide-react";
-import { DOMESTIC_CATEGORIES, DOMESTIC_TOURS, formatPrice, type DomesticTour } from "../data";
+import { DOMESTIC_CATEGORIES, formatPrice, type DomesticTour } from "../data";
+import { useTours } from "../toursStore";
 import { cn } from "../utils/cn";
 import { getTodayInputValue, getUpcomingTourDates } from "../utils/tourDates";
 import { BrandPattern } from "./Brand";
@@ -17,6 +18,7 @@ const InstagramIcon = ({ className }: { className?: string }) => (
 );
 
 export default function DomesticTours() {
+  const { domesticTours: DOMESTIC_TOURS } = useTours();
   const [category, setCategory] = useState<(typeof DOMESTIC_CATEGORIES)[number]["id"]>("all");
   const [selected, setSelected] = useState<DomesticTour | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | undefined>();
@@ -24,7 +26,7 @@ export default function DomesticTours() {
 
   const filtered = useMemo(
     () => (category === "all" ? DOMESTIC_TOURS : DOMESTIC_TOURS.filter((t) => t.category === category)),
-    [category]
+    [category, DOMESTIC_TOURS]
   );
   const getCardDate = (tourId: string) =>
     cardDates[tourId] ?? getUpcomingTourDates(tourId, 1)[0]?.inputValue ?? getTodayInputValue();
